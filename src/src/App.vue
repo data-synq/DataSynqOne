@@ -40,7 +40,6 @@ import DashboardChatFab from "./components/DashboardChatFab.vue";
   min-height: 56px;
   padding-inline: var(--page-padding);
   background: var(--surface-glass-strong);
-  backdrop-filter: blur(18px) saturate(140%);
   box-shadow: 0 1px 0 var(--color-border);
 }
 

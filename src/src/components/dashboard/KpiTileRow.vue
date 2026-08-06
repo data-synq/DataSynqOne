@@ -40,7 +40,6 @@ const tiles = [
   text-align: left;
   cursor: pointer;
   background: var(--surface-glass);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
   border-left: 4px solid var(--accent, var(--color-border));
   border-radius: var(--radius-md);

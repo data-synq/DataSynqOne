@@ -8,7 +8,9 @@ const props = defineProps<{
   statusDistribution: ChartBucket;
 }>();
 
-const statusColors = props.statusDistribution.labels.map((l) => STATUS_COLORS[l] ?? "#87979d");
+// Literal, keine CSS-Variable: der Wert geht an Chart.js aufs Canvas,
+// und dort wird var(...) nicht aufgelöst.
+const statusColors = props.statusDistribution.labels.map((l) => STATUS_COLORS[l] ?? "#8b8f84");
 </script>
 
 <template>

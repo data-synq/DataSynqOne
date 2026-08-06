@@ -52,7 +52,6 @@ const chartOptions = computed(() => ({
 <style scoped>
 .chart-card {
   background: var(--surface-glass);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);

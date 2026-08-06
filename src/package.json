@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@fontsource/ibm-plex-sans": "^5.2.6",
     "chart.js": "^4.5.1",
     "dompurify": "^3.4.13",
     "marked": "^18.0.9",

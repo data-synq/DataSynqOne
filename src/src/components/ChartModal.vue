@@ -66,7 +66,6 @@ const chartOptions = computed(() => {
   position: fixed;
   inset: 0;
   background: rgba(48, 79, 91, 0.28);
-  backdrop-filter: blur(4px);
   z-index: 30;
   display: flex;
   align-items: center;
@@ -80,7 +79,6 @@ const chartOptions = computed(() => {
   width: min(640px, 92vw);
   max-height: 80vh;
   background: var(--surface-glass-strong);
-  backdrop-filter: blur(20px);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: var(--space-4);

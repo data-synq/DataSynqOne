@@ -162,7 +162,6 @@ function toggleHistory() {
   position: fixed;
   inset: 0;
   background: rgba(48, 79, 91, 0.28);
-  backdrop-filter: blur(4px);
   z-index: 40;
   display: flex;
   justify-content: flex-end;
@@ -174,7 +173,6 @@ function toggleHistory() {
   max-width: 100%;
   height: 100%;
   background: var(--surface-glass-strong);
-  backdrop-filter: blur(20px);
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -268,7 +266,6 @@ function toggleHistory() {
 .bubble--assistant {
   align-self: flex-start;
   background: var(--surface-glass-strong);
-  backdrop-filter: blur(8px);
 }
 
 .bubble__label {
@@ -380,7 +377,6 @@ function toggleHistory() {
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
   background: var(--surface-glass);
-  backdrop-filter: blur(10px);
   color: var(--color-heading-strong);
   padding: 0.55rem 1rem;
   font: inherit;
@@ -406,7 +402,6 @@ function toggleHistory() {
   border-radius: var(--radius-lg);
   background: var(--surface-glass-strong);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px);
 }
 
 .input-row textarea {

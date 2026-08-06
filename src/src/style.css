@@ -1,57 +1,85 @@
 :root {
-  /* Primary brand colors */
-  --color-brand-blue: #a8c5d2;
-  --color-brand-blue-strong: #83afc2;
-  --color-brand-blue-dark: #587d8d;
+  /* Aus design/dashboard/Dashboard v2.dc.html: Linien- und Rasterlayout
+     statt Glaskarten. Warmes Off-White, ein einziger Akzent, keine
+     Verläufe, keine Schatten, keine Radien.
 
-  --color-brand-gold: #d7c394;
-  --color-brand-gold-dark: #b59d68;
+     Die Variablennamen des Vorgängerdesigns bleiben erhalten und zeigen
+     auf die neuen Werte. So erbt jede der vierzehn Komponenten den
+     Wechsel, ohne einzeln angefasst zu werden — und nichts fällt ins
+     Pastell zurück, weil kein alter Wert mehr existiert. */
 
-  --color-cream: #e8e0c8;
-  --color-cream-light: #f4f0e4;
+  /* Schrift-/Linienfarben, hell nach dunkel */
+  --color-ink: #161814;
+  --color-ink-2: #24261f;
+  --color-ink-3: #52564c;
+  --color-ink-4: #6f7369;
+  --color-ink-5: #8b8f84;
 
-  /* Modern neutral system */
+  /* Flächen */
   --color-white: #ffffff;
-  --color-canvas: #f8faf9;
-  --color-background: #ffffff;
+  --color-canvas: #f9f8f4;
+  --color-background: #f9f8f4;
   --color-surface: #ffffff;
-  --color-surface-muted: #eef4f6;
-  --color-surface-warm: #f6f2e8;
+  --color-surface-muted: #f4f4f0;
+  --color-surface-warm: #f4f4f0;
+
+  /* Linien tragen die Struktur, nicht Schatten */
+  --color-line: #dcdcd4;
+  --color-line-strong: #c9cbc2;
+  --color-border: #dcdcd4;
+  --color-border-strong: #c9cbc2;
 
   /* Text */
-  --color-text: #46545b;
-  --color-text-muted: #718087;
-  --color-heading: #456774;
-  --color-heading-strong: #304f5b;
-  --color-link: #4f8fa8;
+  --color-text: #24261f;
+  --color-text-muted: #6f7369;
+  --color-heading: #161814;
+  --color-heading-strong: #161814;
 
-  /* Functional */
-  --color-border: rgba(88, 125, 141, 0.16);
-  --color-border-strong: rgba(88, 125, 141, 0.28);
-  --color-focus: #4f8fa8;
-  --color-error: #a8443b;
-  --color-success: #527661;
+  /* Ein Akzent: Tannengrün. Alles andere ist neutral. */
+  --color-accent: #1f6b4f;
+  --color-accent-strong: #175239;
+  --color-link: #1f6b4f;
+  --color-focus: #1f6b4f;
 
-  /* Transparent surfaces */
-  --surface-glass: rgba(255, 255, 255, 0.76);
-  --surface-glass-strong: rgba(255, 255, 255, 0.9);
+  /* Signalfarben, nur für Zustände — nie dekorativ */
+  --color-success: #1f6b4f;
+  --color-warning: #8a5a12;
+  --color-error: #8f3323;
 
-  /* Gradients */
-  --gradient-soft-blue: radial-gradient(circle at 20% 20%, rgba(168, 197, 210, 0.32), transparent 55%);
-  --gradient-soft-gold: radial-gradient(circle at 80% 30%, rgba(215, 195, 148, 0.2), transparent 50%);
+  /* Altnamen der Markenfarben, auf das neue System umgebogen */
+  --color-brand-blue: #1f6b4f;
+  --color-brand-blue-strong: #175239;
+  --color-brand-blue-dark: #161814;
+  --color-brand-gold: #8a5a12;
+  --color-brand-gold-dark: #6d4710;
+  --color-cream: #f4f4f0;
+  --color-cream-light: #f9f8f4;
 
-  /* Typography */
-  --font-display: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-  --font-body: "Inter", "Helvetica Neue", Arial, sans-serif;
+  /* Glasflächen werden deckend, Verläufe entfallen ersatzlos */
+  --surface-glass: #ffffff;
+  --surface-glass-strong: #ffffff;
+  --gradient-soft-blue: none;
+  --gradient-soft-gold: none;
+
+  /* Typografie. IBM Plex kommt über @fontsource aus node_modules, nicht
+     von fonts.googleapis.com — bei jedem Seitenaufruf die IP eines
+     Sachbearbeiters an Google zu schicken, ist in einem Produkt mit
+     Mieterdaten ein vermeidbares Risiko. Import in main.ts. */
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-body);
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: clamp(1rem, 0.97rem + 0.12vw, 1.075rem);
   --font-size-lg: clamp(1.125rem, 1.05rem + 0.3vw, 1.3rem);
   --font-size-xl: clamp(1.4rem, 1.2rem + 0.65vw, 1.8rem);
-  --font-size-2xl: clamp(2rem, 1.55rem + 1.5vw, 3rem);
-  --font-size-3xl: clamp(3rem, 2rem + 3.6vw, 6rem);
+  /* Kleiner als zuvor: das hier ist ein Arbeitswerkzeug, keine
+     Landingpage. Eine 6rem-Überschrift kostet Zeilen, die die
+     Sachbearbeiterin für Vorgänge braucht. */
+  --font-size-2xl: clamp(1.5rem, 1.35rem + 0.5vw, 1.85rem);
+  --font-size-3xl: clamp(1.85rem, 1.6rem + 0.9vw, 2.5rem);
 
   --line-height-tight: 1.1;
   --line-height-heading: 1.2;
@@ -71,17 +99,18 @@
   --space-6: 4.5rem;
   --space-7: 6rem;
 
-  /* Radius */
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 36px;
-  --radius-pill: 999px;
+  /* Radien und Schatten sind im neuen System auf null gesetzt, nicht
+     entfernt: die Namen bleiben gültig, damit keine Komponente bricht.
+     Kanten und Abgrenzung übernehmen Linien. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-pill: 0;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(48, 79, 91, 0.04), 0 8px 24px rgba(48, 79, 91, 0.06);
-  --shadow-md: 0 2px 4px rgba(48, 79, 91, 0.04), 0 18px 50px rgba(48, 79, 91, 0.1);
-  --shadow-lg: 0 12px 30px rgba(48, 79, 91, 0.08), 0 40px 90px rgba(48, 79, 91, 0.13);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
 
   /* Motion */
   --duration-fast: 160ms;
@@ -110,7 +139,7 @@ body {
   font-size: var(--font-size-base);
   font-weight: 400;
   line-height: var(--line-height-body);
-  background: var(--gradient-soft-blue), var(--gradient-soft-gold), var(--color-canvas);
+  background: var(--color-canvas);
 }
 
 h1,
