@@ -1,10 +1,9 @@
 import json
 
-from openai import AsyncOpenAI
+from ..openai_client import get_client
 
 from ..config import settings
 
-_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 _SCHEMA = {
     "type": "json_schema",
@@ -37,7 +36,7 @@ _PROMPT = (
 
 
 async def expand_search_terms(query: str) -> list[str]:
-    completion = await _client.chat.completions.create(
+    completion = await get_client().chat.completions.create(
         model=settings.openai_model,
         messages=[
             {"role": "system", "content": _PROMPT},

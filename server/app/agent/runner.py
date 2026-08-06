@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import AsyncIterator
 
-from openai import AsyncOpenAI
+from ..openai_client import get_client
 
 from ..config import settings
 from ..models import ChatMessage
@@ -70,7 +70,6 @@ SYSTEM_PROMPT = (
     "rechts angezeigt, du musst ihn nicht zusaetzlich verlinken oder beschreiben, was er zeigt."
 )
 
-_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 MAX_TOOL_ROUNDS = 30
 HEARTBEAT_SECONDS = 15
@@ -123,7 +122,7 @@ async def stream_agent(message: str, history: list[ChatMessage]) -> AsyncIterato
         response = None
         try:
             async for event in _await_with_heartbeat(
-                _client.responses.create(
+                get_client().responses.create(
                     model=settings.openai_model,
                     instructions=SYSTEM_PROMPT,
                     input=input_items,

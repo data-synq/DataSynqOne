@@ -1,11 +1,10 @@
 import json
 
-from openai import AsyncOpenAI
+from ..openai_client import get_client
 
 from ..config import settings
 from ..models import ChatMessage
 
-_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 _SCHEMA = {
     "type": "json_schema",
@@ -47,7 +46,7 @@ async def generate_suggestions(
     transcript = "\n".join(f"{m.role}: {m.content}" for m in history)
     transcript += f"\nuser: {last_user_message}\nassistant: {last_assistant_message}"
 
-    completion = await _client.chat.completions.create(
+    completion = await get_client().chat.completions.create(
         model=settings.openai_model,
         messages=[
             {"role": "system", "content": _PROMPT},
