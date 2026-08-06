@@ -23,7 +23,16 @@ export const useDashboardStore = defineStore("dashboard", {
         this.lastLoadedAt = new Date().toISOString();
         this.error = null;
       } catch (e) {
-        this.error = e instanceof Error ? e.message : String(e);
+        // TypeError("Failed to fetch") heißt: Backend nicht erreichbar.
+        // Die rohe Browsermeldung hilft niemandem — benennen, was los ist
+        // und was zu tun wäre. Alles andere (HTTP-Fehler aus client.ts)
+        // trägt seine Statusnummer bereits im Text.
+        this.error =
+          e instanceof TypeError
+            ? "Server nicht erreichbar — läuft das Backend? Es wird automatisch weiter versucht."
+            : e instanceof Error
+              ? e.message
+              : String(e);
       } finally {
         this.loading = false;
       }
