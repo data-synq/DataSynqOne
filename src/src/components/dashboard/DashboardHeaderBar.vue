@@ -84,13 +84,14 @@ watch([tick, () => props.generatedAt], computeLabel, { immediate: true });
   animation: pulse 1.8s var(--ease-standard) infinite;
 }
 
+/* rgba des Akzents #1f6b4f — der Puls trug noch das alte Grün #527661 */
 @keyframes pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(82, 118, 97, 0.45);
+    box-shadow: 0 0 0 0 rgba(31, 107, 79, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(82, 118, 97, 0);
+    box-shadow: 0 0 0 5px rgba(31, 107, 79, 0);
   }
 }
 </style>

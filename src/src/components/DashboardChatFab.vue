@@ -26,7 +26,7 @@ const store = useChatStore();
   height: 56px;
   border-radius: var(--radius-pill);
   border: none;
-  background: var(--color-brand-gold-dark);
+  background: var(--color-accent);
   color: var(--color-white);
   font-size: 1.4rem;
   box-shadow: var(--shadow-md);

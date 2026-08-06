@@ -10,7 +10,7 @@ import DashboardChatFab from "./components/DashboardChatFab.vue";
     <header class="site-header">
       <span class="logo">
         <span class="logo__mark">◆</span>
-        <span class="logo__text">Paperless Agent</span>
+        <span class="logo__text">DataSynq One</span>
       </span>
     </header>
 
@@ -55,7 +55,7 @@ import DashboardChatFab from "./components/DashboardChatFab.vue";
 }
 
 .logo__mark {
-  color: var(--color-brand-gold-dark);
+  color: var(--color-accent);
   font-size: 0.8em;
 }
 
