@@ -106,7 +106,7 @@ function ask() {
 .panel-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(48, 79, 91, 0.28);
+  background: rgba(22, 24, 20, 0.34);
   z-index: 30;
   display: flex;
   align-items: center;
