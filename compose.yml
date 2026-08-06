@@ -50,14 +50,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      # Cold start (migrations, index load) takes ~2 min; without this the boot-time
+      # failures count against `retries` and backend's service_healthy gate gives up.
+      start_period: 240s
 
   backend:
     build: ./server
     container_name: backend
     restart: unless-stopped
     depends_on:
-      - paperless
-      - vectordb
+      paperless:
+        condition: service_healthy
+      vectordb:
+        condition: service_healthy
     env_file:
       - env/backend.env
     ports:
