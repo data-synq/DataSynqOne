@@ -83,8 +83,16 @@ jobs:
           push: true
           # Baked into the JS bundle at build time - the frontend has no
           # runtime config, so this is the one place the backend URL is set.
+          #
+          # Relative, not https://api.data-synq.com: one.data-synq.com is
+          # public behind HTTP basic auth, and that only works if the API
+          # shares the frontend's origin. Cross-origin, the CORS preflight
+          # carries no Authorization header and gets 401'd before the real
+          # request happens, and the browser never prompts for a foreign
+          # origin's credentials either. Caddy routes /api/* on that host to
+          # one-backend and strips the prefix - see DataSynqInfra's Caddyfile.
           build-args: |
-            VITE_BACKEND_URL=https://api.data-synq.com
+            VITE_BACKEND_URL=/api
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
