@@ -1,4 +1,8 @@
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8001";
+// `||` (not `??`) on purpose: the Dockerfile bakes `ENV VITE_BACKEND_URL=$ARG`,
+// so an unset build-arg becomes an empty string ("") rather than undefined. `??`
+// would keep that "" and send every request to the frontend's own origin (404).
+// `||` treats "" as unset and falls back to the local backend for dev builds.
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
