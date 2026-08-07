@@ -93,66 +93,34 @@ cd DataSynqOne
 
 ### 2. Create the environment files
 
-Compose expects several env files in an `env/` directory (not checked in):
+The env files in `env/` hold secrets and are not checked in. Create them from the templates:
 
 ```bash
-mkdir -p env
+make env
 ```
 
-**`env/postgres.env`**
+That copies every `env/*.env.example` to `env/*.env`. Then edit them:
 
-```env
-POSTGRES_DB=paperless
-POSTGRES_USER=paperless
-POSTGRES_PASSWORD=change-me
-```
+- **`env/backend.env`** — set `PAPERLESS_API_TOKEN` and `OPENAI_API_KEY`.
+- **`env/paperless.env`** — set the passwords, `PAPERLESS_SECRET_KEY` and `USERMAP_UID`/`USERMAP_GID`
+  (your own `id -u` / `id -g`).
+- **`env/postgres.env`** — set `POSTGRES_PASSWORD`; it must match `PAPERLESS_DBPASS`.
+- **`env/vectordb.env`** — defaults are fine.
+- **`env/backend.dev.env`** — host overrides for `make dev`; defaults are fine.
 
-**`env/vectordb.env`**
-
-```env
-POSTGRES_DB=brain
-POSTGRES_USER=brain
-POSTGRES_PASSWORD=brain
-```
-
-**`env/paperless.env`**
-
-```env
-PAPERLESS_REDIS=redis://redis:6379
-PAPERLESS_DBHOST=postgres
-PAPERLESS_DBNAME=paperless
-PAPERLESS_DBUSER=paperless
-PAPERLESS_DBPASS=change-me
-PAPERLESS_SECRET_KEY=change-me-too
-PAPERLESS_URL=http://localhost
-PAPERLESS_TIME_ZONE=Europe/Berlin
-PAPERLESS_OCR_LANGUAGE=deu
-```
-
-**`env/backend.env`**
-
-```env
-PAPERLESS_BASE_URL=http://paperless:8000
-PAPERLESS_API_TOKEN=<paperless-api-token>
-OPENAI_API_KEY=<your-openai-key>
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-DATABASE_URL=postgresql://brain:brain@vectordb:5432/brain
-CORS_ORIGINS=["http://localhost:8080"]
-```
-
-> Create the `PAPERLESS_API_TOKEN` in Paperless under *Settings → API Token*. You'll need to
-> create a Paperless admin user on first start.
+> Create the `PAPERLESS_API_TOKEN` in Paperless under *Settings → API Token*. It only exists
+> after the first start, so leave it empty for now and fill it in afterwards.
 
 ### 3. Frontend configuration (optional)
 
 The frontend reads `VITE_BACKEND_URL` at build time (default: `http://localhost:8001`).
-For different deployments, set it in `src/.env` (see `src/.env.example`).
+For different deployments, set it in `src/.env` (see `src/.env.example`). In dev mode this is
+already handled by `src/.env.development` — see [Development](#development).
 
 ### 4. Start
 
 ```bash
-docker compose up -d --build
+make up            # or: docker compose up -d --build
 ```
 
 Then available at:
@@ -167,7 +135,7 @@ For semantic search to work, the Paperless documents must be synced into the vec
 once:
 
 ```bash
-curl -X POST http://localhost:8001/sync/documents
+make sync          # or: curl -X POST http://localhost:8001/sync/documents
 ```
 
 Check the status:
@@ -221,26 +189,49 @@ The agent has access to tools including:
 
 ## Development
 
-### Backend
-
 ```bash
-cd server
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+make dev
 ```
 
-Configuration is via environment variables (see `server/app/config.py`).
+That is the whole setup. It creates any missing `env/*.env` from the templates, installs
+`server/.venv` and `src/node_modules` if they are stale, starts redis / postgres / vectordb /
+paperless as containers, and then runs **backend and frontend natively with hot reload**:
 
-### Frontend
+| | URL | Reload |
+|---|---|---|
+| Frontend (Vite) | http://localhost:5173 | HMR on every change under `src/src` |
+| Backend (uvicorn) | http://localhost:8001/docs | restarts on every change under `server/app` |
+| Paperless-ngx | http://localhost | – |
+| vectordb (pgvector) | `localhost:5433` | – |
 
-```bash
-cd src
-npm install
-npm run dev      # dev server
-npm run build    # production build to dist/
-```
+`Ctrl-C` stops backend and frontend; the containers keep running until `make dev-down`.
 
+In dev the frontend talks to the backend through a Vite proxy on `/api` that strips the prefix —
+the same shape the reverse proxy provides in production, so dev is same-origin and needs no CORS.
+`src/.env.development` sets `VITE_BACKEND_URL=/api` for that; it is only loaded in dev mode, never
+by `npm run build`.
+
+`env/backend.dev.env` holds the host overrides applied on top of `env/backend.env` (the Compose
+service names `vectordb` and `paperless` do not resolve from the host). Secrets belong in
+`env/backend.env` only.
+
+### Make targets
+
+| Target | Description |
+|--------|-------------|
+| `make dev` | Everything in dev mode |
+| `make dev-backend` / `make dev-frontend` | A single process, for separate terminals |
+| `make dev-down` | Stop the dev containers |
+| `make install` | Reinstall `server/.venv` and `src/node_modules` |
+| `make env` | Create missing `env/*.env` from `env/*.env.example` |
+| `make infra` / `make infra-down` | Only redis, postgres, vectordb, paperless |
+| `make up` / `make down` / `make build` / `make logs` / `make ps` | Full stack from `compose.yml` |
+| `make sync` | Index documents into the vector database |
+| `make clean` | Remove `server/.venv`, `src/node_modules`, `src/dist` |
+
+`make dev` and `make up` cannot run at the same time — both claim the same container names.
+
+Backend configuration is via environment variables (see `server/app/config.py`).
 Design guidelines: see [`src/DESIGN.md`](src/DESIGN.md).
 
 ---

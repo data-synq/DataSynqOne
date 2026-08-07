@@ -1,5 +1,7 @@
 data/
-env/
+# The env files hold secrets; the .example templates are the checked-in ones.
+env/*
+!env/*.example
 node_modules/
 dist/
 .venv/
