@@ -13,6 +13,12 @@ maintenance requests and correspondence become quick to find, analyze and act on
 
 ---
 
+## Concept docs
+
+- [Bauplan & Betriebsordnung eines Hausverwaltungs-OS](docs/hausverwaltungs-os-bauplan.md)
+
+---
+
 ## Features
 
 - **AI chat for property management** — an agent (OpenAI, function calling) that finds documents,
