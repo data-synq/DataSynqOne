@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useChatStore } from "../stores/chat";
+import { useDashboardStore } from "../stores/dashboard";
 import ToolTrace from "./ToolTrace.vue";
 import ChatHistoryPanel from "./ChatHistoryPanel.vue";
-import IconClose from "./icons/IconClose.vue";
-import IconHistory from "./icons/IconHistory.vue";
-import IconPlus from "./icons/IconPlus.vue";
-import IconSend from "./icons/IconSend.vue";
-import IconChart from "./icons/IconChart.vue";
 import { renderMarkdown } from "../markdown";
 
 const store = useChatStore();
+const dashboard = useDashboardStore();
 const input = ref("");
 const messagesEl = ref<HTMLDivElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
+
+// Der Assistent antwortet über dem, was gerade auf dem Dashboard eingestellt
+// ist. Das hier zu zeigen ist kein Schmuck: sonst wundert man sich, warum
+// eine Frage nach "allen Fristen" nur die eines Objekts betrifft.
+const context = computed(() => dashboard.selectedObject ?? "gesamter Bestand");
 
 function scrollToBottom() {
   nextTick(() => {
@@ -68,385 +70,341 @@ async function useSuggestion(text: string) {
   if (store.sending) return;
   await store.sendMessage(text);
 }
-
-function toggleHistory() {
-  store.historyOpen = !store.historyOpen;
-}
 </script>
 
 <template>
-  <div v-if="store.chatOpen" class="drawer-backdrop" @click.self="store.closeChat()">
-    <aside class="drawer">
-      <div class="drawer__header">
-        <span class="drawer__title">Chat</span>
-        <div class="drawer__actions">
+  <!-- Angedockt statt über der Seite: kein Scrim, keine Verdunklung. Man
+       fragt den Assistenten *zu* dem, was daneben steht, und muss es dabei
+       weiter sehen können. Deshalb bleibt das Panel im Baum und fährt über
+       transform aus — v-if würde bei jedem Öffnen den Verlauf neu aufbauen. -->
+  <aside
+    class="assistant"
+    :class="{ 'assistant--open': store.chatOpen }"
+    :aria-hidden="!store.chatOpen"
+    :inert="store.chatOpen ? undefined : true"
+  >
+    <div class="assistant__head">
+      <div class="assistant__title-group">
+        <h2>Assistent</h2>
+        <span class="mono assistant__context">Kontext: {{ context }}</span>
+      </div>
+      <div class="assistant__actions">
+        <button
+          type="button"
+          class="link-action"
+          :class="{ 'link-action--active': store.historyOpen }"
+          @click="store.historyOpen = !store.historyOpen"
+        >
+          Verlauf
+        </button>
+        <button type="button" class="link-action" @click="store.newChat()">Neu</button>
+        <button type="button" class="link-action" @click="store.closeChat()">Schließen</button>
+      </div>
+    </div>
+
+    <ChatHistoryPanel v-if="store.historyOpen" />
+
+    <div ref="messagesEl" class="assistant__messages">
+      <p v-if="!store.messages.length" class="assistant__empty mono">
+        Antworten mit Quellenangabe aus dem Dokumentenbestand.
+      </p>
+
+      <div v-for="(m, i) in store.messages" :key="i" class="turn">
+        <p class="turn__label" :class="{ 'turn__label--assistant': m.role === 'assistant' }">
+          {{ m.role === "user" ? "Sie" : "Antwort" }}
+        </p>
+        <ToolTrace v-if="m.toolCalls?.length" :tool-calls="m.toolCalls" :streaming="!!m.streaming" />
+        <div v-if="m.content" class="turn__content" @click="onContentClick" v-html="renderMarkdown(m.content)" />
+        <div v-else-if="m.streaming" class="typing"><span /><span /><span /></div>
+        <div v-if="m.charts?.length" class="turn__charts">
           <button
+            v-for="(chart, ci) in m.charts"
+            :key="ci"
             type="button"
-            class="icon-button"
-            :class="{ 'icon-button--active': store.historyOpen }"
-            title="Verlauf"
-            @click="toggleHistory"
+            class="turn__chart"
+            @click="store.openChart(chart)"
           >
-            <IconHistory />
-          </button>
-          <button type="button" class="icon-button" title="Neuer Chat" @click="store.newChat()">
-            <IconPlus />
-          </button>
-          <button type="button" class="icon-button" title="Schließen" @click="store.closeChat()">
-            <IconClose />
+            {{ chart.title }}
           </button>
         </div>
       </div>
 
-      <ChatHistoryPanel v-if="store.historyOpen" />
-
-      <div class="chat">
-        <div class="messages" ref="messagesEl">
-          <div v-for="(m, i) in store.messages" :key="i" :class="['bubble', `bubble--${m.role}`]">
-            <span class="bubble__label">{{ m.role === "user" ? "Du" : "Agent" }}</span>
-            <ToolTrace v-if="m.toolCalls?.length" :tool-calls="m.toolCalls" :streaming="!!m.streaming" />
-            <div
-              v-if="m.content"
-              class="bubble__content"
-              @click="onContentClick"
-              v-html="renderMarkdown(m.content)"
-            ></div>
-            <div v-else-if="m.streaming" class="typing-indicator">
-              <span /><span /><span />
-            </div>
-            <div v-if="m.charts?.length" class="chart-chips">
-              <button
-                v-for="(chart, ci) in m.charts"
-                :key="ci"
-                type="button"
-                class="chart-chip"
-                @click="store.openChart(chart)"
-              >
-                <IconChart /> {{ chart.title }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!store.sending && store.suggestions.length" class="suggestions">
-          <button
-            v-for="(s, i) in store.suggestions"
-            :key="i"
-            type="button"
-            class="suggestion-chip"
-            @click="useSuggestion(s)"
-          >
-            {{ s }}
-          </button>
-        </div>
-
-        <form class="input-row" @submit.prevent="submit">
-          <textarea
-            ref="inputEl"
-            v-model="input"
-            rows="1"
-            placeholder="Frage zum Fall oder Dokument..."
-            @keydown.enter="onEnter"
-          />
-          <button type="submit" class="send-button" :disabled="store.sending || !input.trim()" aria-label="Senden">
-            <IconSend />
-          </button>
-        </form>
+      <div v-if="!store.sending && store.suggestions.length" class="suggestions">
+        <p class="eyebrow">Vorschläge</p>
+        <button
+          v-for="(s, i) in store.suggestions"
+          :key="i"
+          type="button"
+          class="suggestions__item"
+          @click="useSuggestion(s)"
+        >
+          {{ s }}
+        </button>
       </div>
-    </aside>
-  </div>
+    </div>
+
+    <form class="assistant__foot" @submit.prevent="submit">
+      <div class="assistant__input-row">
+        <label class="assistant__label" for="assistant-input">Frage an den Assistenten</label>
+        <textarea
+          id="assistant-input"
+          ref="inputEl"
+          v-model="input"
+          rows="1"
+          placeholder="Frage zur Verwaltung stellen"
+          @keydown.enter="onEnter"
+        />
+        <button type="submit" class="button--secondary" :disabled="store.sending || !input.trim()">
+          Senden
+        </button>
+      </div>
+      <p class="assistant__hint mono">Antworten mit Quellenangabe aus dem Dokumentenbestand</p>
+    </form>
+  </aside>
 </template>
 
 <style scoped>
-.drawer-backdrop {
+.assistant {
   position: fixed;
-  inset: 0;
-  background: rgba(22, 24, 20, 0.34);
   z-index: 40;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.drawer {
-  position: relative;
-  width: clamp(480px, 42vw, 720px);
-  max-width: 100%;
-  height: 100%;
-  background: var(--surface-glass-strong);
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  transition: transform var(--duration-normal) var(--ease-emphasized);
+  width: min(460px, 100vw);
+  background: var(--color-white);
+  border-left: 1px solid var(--color-line);
+  transform: translateX(102%);
+  transition: transform 220ms var(--ease-standard);
 }
 
-.drawer__header {
+.assistant--open {
+  transform: translateX(0);
+}
+
+.assistant__head {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--page-padding);
-  border-bottom: 1px solid var(--color-border);
+  gap: 0.75rem;
+  height: 52px;
+  padding-inline: 1.25rem;
+  border-bottom: 1px solid var(--color-line);
 }
 
-.drawer__title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--color-heading-strong);
-}
-
-.drawer__actions {
+.assistant__title-group {
   display: flex;
-  gap: 0.4rem;
+  align-items: baseline;
+  gap: 0.5625rem;
+  min-width: 0;
 }
 
-.icon-button {
-  display: inline-flex;
+.assistant__title-group h2 {
+  margin: 0;
+}
+
+.assistant__context {
+  font-size: var(--font-size-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant__actions {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  min-width: 38px;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-white);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-size: 1rem;
-  transition:
-    color var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+  gap: 0.875rem;
+  flex: none;
 }
 
-.icon-button:hover {
-  color: var(--color-brand-blue-dark);
+.link-action--active {
+  color: var(--color-ink);
 }
 
-.icon-button--active {
-  color: var(--color-brand-blue-dark);
-  box-shadow: var(--shadow-md);
-}
-
-.chat {
+.assistant__messages {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3) var(--page-padding);
-  box-sizing: border-box;
-}
-
-.messages {
-  flex: 1;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-block: var(--space-2);
+  padding: 1.25rem;
 }
 
-.bubble {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  max-width: min(720px, 90%);
-  padding: 0.75rem 1.1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  font-size: var(--font-size-sm);
+.assistant__empty {
+  margin: 0;
 }
 
-.bubble--user {
-  align-self: flex-end;
-  background: var(--color-surface-muted);
-  text-align: right;
+/* Sprechblasen sind hier falsch: es ist kein Gespräch unter Gleichen, sondern
+   eine Frage und eine belegte Antwort. Haarlinien trennen sie so, wie sie
+   auch die Vorgangsliste trennen. */
+.turn {
+  padding-block: 1.125rem;
+  border-bottom: 1px solid var(--color-line-soft);
 }
 
-.bubble--assistant {
-  align-self: flex-start;
-  background: var(--surface-glass-strong);
+.turn:first-child {
+  padding-top: 0;
 }
 
-.bubble__label {
-  color: var(--color-text-muted);
-  font-family: var(--font-display);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
+.turn:last-child {
+  border-bottom: 0;
+}
+
+.turn__label {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--color-ink-5);
 }
 
-.bubble__content :deep(p) {
+.turn__label--assistant {
+  color: var(--color-accent);
+}
+
+.turn__content {
+  color: var(--color-text);
+  line-height: var(--line-height-prose);
+}
+
+.turn__content :deep(p) {
   margin: 0 0 0.5rem;
 }
 
-.bubble__content :deep(p:last-child) {
+.turn__content :deep(p:last-child) {
   margin-bottom: 0;
 }
 
-.bubble__content :deep(ul),
-.bubble__content :deep(ol) {
+.turn__content :deep(ul),
+.turn__content :deep(ol) {
   margin: 0 0 0.5rem;
   padding-inline-start: 1.2rem;
 }
 
-.bubble__content :deep(a) {
-  color: var(--color-link);
+/* Belegstellen: der Akzentstrich links markiert, was aus einem Dokument
+   stammt und nicht aus dem Modell. */
+.turn__content :deep(.doc-link) {
+  display: inline;
+  padding: 0.05rem 0.25rem;
+  background: var(--color-surface-muted);
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-md);
+  cursor: pointer;
 }
 
-.typing-indicator {
+.turn__charts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.turn__chart {
+  border: 1px solid var(--color-line-strong);
+  background: transparent;
+  padding: 0.25rem 0.625rem;
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.turn__chart:hover {
+  border-color: var(--color-ink);
+}
+
+.typing {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.2rem 0;
 }
 
-.typing-indicator span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  animation: typing-bounce 1.1s var(--ease-standard) infinite;
+.typing span {
+  width: 5px;
+  height: 5px;
+  background: var(--color-ink-5);
+  animation: typing-blink 1.1s var(--ease-standard) infinite;
 }
 
-.typing-indicator span:nth-child(2) {
+.typing span:nth-child(2) {
   animation-delay: 0.15s;
 }
 
-.typing-indicator span:nth-child(3) {
+.typing span:nth-child(3) {
   animation-delay: 0.3s;
 }
 
-@keyframes typing-bounce {
+@keyframes typing-blink {
   0%,
   60%,
   100% {
-    transform: translateY(0);
-    opacity: 0.5;
+    opacity: 0.3;
   }
   30% {
-    transform: translateY(-4px);
     opacity: 1;
   }
 }
 
-.chart-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.3rem;
-}
-
-.chart-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--color-brand-blue-strong);
-  background: var(--color-cream-light);
-  color: var(--color-brand-blue-dark);
-  border-radius: var(--radius-pill);
-  padding: 0.2rem 0.7rem;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
-.bubble__content :deep(.doc-link) {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border: 1px solid var(--color-brand-blue-strong);
-  background: var(--color-cream-light);
-  color: var(--color-brand-blue-dark);
-  border-radius: var(--radius-pill);
-  padding: 0.2rem 0.7rem;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
 .suggestions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-block: var(--space-2);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding-top: 1.125rem;
 }
 
-.suggestion-chip {
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface-glass);
-  color: var(--color-heading-strong);
-  padding: 0.55rem 1rem;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-normal) var(--ease-standard);
+.suggestions .eyebrow {
+  margin: 0 0 0.125rem;
 }
 
-.suggestion-chip:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-1);
-  padding: 0.5rem;
-  border-radius: var(--radius-lg);
-  background: var(--surface-glass-strong);
-  box-shadow: var(--shadow-sm);
-}
-
-.input-row textarea {
-  flex: 1;
-  border: none;
+.suggestions__item {
+  border: 0;
   background: transparent;
-  box-shadow: none;
-  min-height: 24px;
-  max-height: 7.5rem;
-  resize: none;
-  padding: 0.5rem 0.6rem;
+  padding: 0;
   font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--color-accent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggestions__item:hover {
+  text-decoration: underline;
+}
+
+.assistant__foot {
+  flex: none;
+  padding: 0.875rem 1.25rem 1.125rem;
+  border-top: 1px solid var(--color-line);
+}
+
+.assistant__input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.assistant__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.assistant__input-row textarea {
+  max-height: 7rem;
   line-height: 1.4;
 }
 
-.input-row textarea:focus {
-  box-shadow: none;
-  outline: none;
-}
-
-.send-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-brand-blue-dark);
-  color: var(--color-white);
-  cursor: pointer;
-  font-size: 1.1rem;
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
-}
-
-.send-button:hover:not(:disabled) {
-  background: var(--color-heading-strong);
-  transform: translateY(-1px);
-}
-
-.send-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.assistant__hint {
+  margin: 0.5rem 0 0;
+  font-size: var(--font-size-2xs);
+  color: #a0a498;
 }
 </style>

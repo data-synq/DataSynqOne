@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import IconTool from "./icons/IconTool.vue";
+import { reactive, ref, watch } from "vue";
 
 const props = defineProps<{
   toolCalls: { id: string; name: string; arguments: Record<string, unknown>; result?: unknown }[];
   streaming: boolean;
 }>();
 
+// Während der Antwort offen, danach zu: solange gearbeitet wird, ist der
+// Ablauf die einzige Rückmeldung; steht die Antwort da, ist er Beiwerk.
 const open = ref(props.streaming);
 
 watch(
@@ -16,118 +17,131 @@ watch(
   },
 );
 
-function formatArgs(args: Record<string, unknown>): string {
-  return Object.entries(args)
+function call(name: string, args: Record<string, unknown>): string {
+  const inner = Object.entries(args)
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(", ");
+  return `${name}(${inner})`;
 }
+
+// Das rohe Ergebnis je Aufruf bleibt erreichbar. Es ist im Design nicht
+// vorgesehen, aber es ist das Einzige, woran sich nachvollziehen lässt,
+// worauf eine Antwort sich stützt — dafür ist die Ablaufanzeige da.
+const expanded = reactive<Record<string, boolean>>({});
 </script>
 
 <template>
-  <details v-if="toolCalls.length" class="tool-trace" :open="open" @toggle="open = ($event.target as HTMLDetailsElement).open">
-    <summary class="tool-trace__summary">
-      <IconTool /> {{ toolCalls.length }} Tool-Aufruf{{ toolCalls.length === 1 ? "" : "e" }}
-      <span class="tool-trace__names">({{ toolCalls.map((c) => c.name).join(", ") }})</span>
-    </summary>
-    <ul class="tool-trace__list">
-      <li v-for="call in toolCalls" :key="call.id" class="tool-trace__item">
-        <div class="tool-trace__row">
-          <span class="tool-trace__name">{{ call.name }}</span>
-          <span class="tool-trace__args">({{ formatArgs(call.arguments) }})</span>
-          <span v-if="call.result === undefined" class="tool-trace__status">läuft…</span>
-          <span v-else class="tool-trace__status tool-trace__status--done">fertig</span>
+  <div v-if="toolCalls.length" class="trace">
+    <button type="button" class="trace__toggle" :aria-expanded="open" @click="open = !open">
+      {{ toolCalls.length }} Tool-Aufruf{{ toolCalls.length === 1 ? "" : "e" }} {{ open ? "▾" : "▸" }}
+    </button>
+
+    <div v-if="open" class="trace__list">
+      <div v-for="c in toolCalls" :key="c.id" class="trace__entry">
+        <div class="trace__row">
+          <span class="trace__call">{{ call(c.name, c.arguments) }}</span>
+          <button
+            v-if="c.result !== undefined"
+            type="button"
+            class="trace__state trace__state--done"
+            :aria-expanded="!!expanded[c.id]"
+            @click="expanded[c.id] = !expanded[c.id]"
+          >
+            fertig {{ expanded[c.id] ? "▾" : "▸" }}
+          </button>
+          <span v-else class="trace__state">läuft</span>
         </div>
-        <details v-if="call.result !== undefined" class="tool-trace__result">
-          <summary>Ergebnis anzeigen</summary>
-          <pre>{{ JSON.stringify(call.result, null, 2) }}</pre>
-        </details>
-      </li>
-    </ul>
-  </details>
+        <pre v-if="expanded[c.id]" class="trace__result">{{ JSON.stringify(c.result, null, 2) }}</pre>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.tool-trace {
-  margin-bottom: 0.4rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: var(--radius-sm);
+.trace {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.625rem;
   background: var(--color-surface-muted);
-  box-shadow: var(--shadow-sm);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
 }
 
-.tool-trace__summary {
-  cursor: pointer;
-  color: var(--color-brand-blue-dark);
-  font-weight: 500;
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.tool-trace__summary::-webkit-details-marker {
-  display: none;
-}
-
-.tool-trace__names {
-  color: var(--color-text-muted);
-  font-weight: 400;
-}
-
-.tool-trace__list {
-  list-style: none;
-  margin: 0.3rem 0 0;
+.trace__toggle {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.tool-trace__item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.tool-trace__row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.35rem;
-}
-
-.tool-trace__name {
-  color: var(--color-brand-blue-dark);
-  font-weight: 500;
-}
-
-.tool-trace__status--done {
-  color: var(--color-success);
-}
-
-.tool-trace__result {
-  margin-left: 0.2rem;
-}
-
-.tool-trace__result summary {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-ink-4);
+  text-align: left;
   cursor: pointer;
-  color: var(--color-text-muted);
-  list-style: none;
 }
 
-.tool-trace__result summary::-webkit-details-marker {
-  display: none;
+.trace__toggle:hover {
+  color: var(--color-ink);
 }
 
-.tool-trace__result pre {
-  margin: 0.2rem 0 0;
-  padding: 0.6rem;
-  background: var(--color-white);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  max-height: 240px;
+.trace__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+  margin-top: 0.5rem;
+}
+
+.trace__entry {
+  padding-top: 0.3125rem;
+  border-top: 1px solid #e2e2da;
+}
+
+.trace__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.625rem;
+}
+
+.trace__call {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace__state {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-ink-5);
+  white-space: nowrap;
+}
+
+button.trace__state {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  cursor: pointer;
+}
+
+.trace__state--done {
+  color: var(--color-accent);
+}
+
+.trace__result {
+  margin: 0.3125rem 0 0;
+  padding: 0.5rem 0.625rem;
+  max-height: 220px;
   overflow: auto;
+  background: var(--color-white);
+  border: 1px solid var(--color-line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  line-height: 1.5;
+  color: var(--color-ink-3);
   white-space: pre-wrap;
   word-break: break-word;
 }

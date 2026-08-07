@@ -1,12 +1,12 @@
 :root {
-  /* Aus design/dashboard/Dashboard v2.dc.html: Linien- und Rasterlayout
+  /* Aus design/dashboard/Dashboard v3.dc.html: Linien- und Rasterlayout
      statt Glaskarten. Warmes Off-White, ein einziger Akzent, keine
      Verläufe, keine Schatten, keine Radien.
 
-     Die Variablennamen des Vorgängerdesigns bleiben erhalten und zeigen
-     auf die neuen Werte. So erbt jede der vierzehn Komponenten den
-     Wechsel, ohne einzeln angefasst zu werden — und nichts fällt ins
-     Pastell zurück, weil kein alter Wert mehr existiert. */
+     Die Palette stammt bereits aus v2 und blieb unverändert; v3 ändert die
+     Struktur, nicht die Farben. Die Variablennamen des ersten Designs
+     bleiben erhalten und zeigen auf die neuen Werte, damit nichts ins
+     Pastell zurückfällt — kein alter Wert existiert mehr. */
 
   /* Schrift-/Linienfarben, hell nach dunkel */
   --color-ink: #161814;
@@ -23,7 +23,10 @@
   --color-surface-muted: #f4f4f0;
   --color-surface-warm: #f4f4f0;
 
-  /* Linien tragen die Struktur, nicht Schatten */
+  /* Linien tragen die Struktur, nicht Schatten. Drei Stärken, von leise nach
+     laut: Zeilentrenner innerhalb einer Liste, Abgrenzung zwischen
+     Abschnitten, Rahmen um eigenständige Flächen. */
+  --color-line-soft: #e6e6de;
   --color-line: #dcdcd4;
   --color-line-strong: #c9cbc2;
   --color-border: #dcdcd4;
@@ -70,25 +73,36 @@
   --font-sans: var(--font-body);
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: clamp(1rem, 0.97rem + 0.12vw, 1.075rem);
-  --font-size-lg: clamp(1.125rem, 1.05rem + 0.3vw, 1.3rem);
-  --font-size-xl: clamp(1.4rem, 1.2rem + 0.65vw, 1.8rem);
-  /* Kleiner als zuvor: das hier ist ein Arbeitswerkzeug, keine
+  /* v3 rechnet in px; die Werte stehen hier als Bruchteil der Browser-
+     Wurzelgröße, damit eine hochgesetzte Schriftgröße im Browser weiterhin
+     durchschlägt. Ein `html { font-size: 14px }` täte das nicht.
+
+     Die Stufen 13,5px und 14px des Designs sind zu einer zusammengefallen:
+     der halbe Pixel ist auf dem Schirm nicht zu sehen und zwei fast gleiche
+     Tokens nicht wert. */
+  --font-size-2xs: 0.656rem; /* 10.5px — Mono-Label, Eyebrow, Gruppenkopf */
+  --font-size-xs: 0.688rem; /* 11px — Mono-Metazeile */
+  --font-size-sm: 0.75rem; /* 12px — Abschnittsüberschrift, Schaltflächen */
+  --font-size-md: 0.781rem; /* 12.5px — Sekundärtext in Tabellen und Listen */
+  --font-size-base: 0.875rem; /* 14px — Grundmaß: Listentitel und Fließtext */
+  --font-size-lg: 1rem; /* 16px */
+  --font-size-xl: 1.125rem; /* 18px */
+  /* Kleiner als im ersten Design: das hier ist ein Arbeitswerkzeug, keine
      Landingpage. Eine 6rem-Überschrift kostet Zeilen, die die
      Sachbearbeiterin für Vorgänge braucht. */
-  --font-size-2xl: clamp(1.5rem, 1.35rem + 0.5vw, 1.85rem);
-  --font-size-3xl: clamp(1.85rem, 1.6rem + 0.9vw, 2.5rem);
+  --font-size-2xl: 1.313rem; /* 21px */
+  --font-size-3xl: clamp(1.375rem, 1rem + 1.1vw, 1.875rem); /* bis 30px — der Lagesatz */
+  --font-size-display: 3.125rem; /* 50px — die Kennzahlen, und sonst nichts */
 
-  --line-height-tight: 1.1;
-  --line-height-heading: 1.2;
-  --line-height-body: 1.65;
+  --line-height-tight: 1;
+  --line-height-heading: 1.25;
+  --line-height-body: 1.45;
+  --line-height-prose: 1.65; /* OCR-Text und Assistentenantworten, die man liest */
 
   /* Layout */
-  --content-width: 1180px;
+  --content-width: 1480px;
   --content-narrow: 760px;
-  --page-padding: clamp(1.25rem, 4vw, 3rem);
+  --page-padding: clamp(1.25rem, 3vw, 2.5rem);
 
   /* Spacing (8px grid) */
   --space-1: 0.5rem;
@@ -153,17 +167,58 @@ h3 {
   margin: 0 0 var(--space-2);
 }
 
+/* Der Lagesatz über dem Dashboard. Leicht und weit, weil er gelesen und
+   nicht überflogen wird — das einzige Element in dieser Größe. */
 h1 {
   font-size: var(--font-size-3xl);
-  line-height: var(--line-height-tight);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
+/* Abschnittsüberschriften sind in v3 keine großen Wörter, sondern schmale
+   Versalzeilen über einer 2px-Linie. Diese Kombination trägt den Rhythmus
+   der ganzen Seite, deshalb steht sie hier und nicht in acht Komponenten. */
 h2 {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 h3 {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Die Mono-Ebene: Datum, Zähler, Zustandslabel. Alles, was gelesen wird,
+   um es abzugleichen, nicht um es zu verstehen. */
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-5);
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-5);
+}
+
+/* Kopfzeile eines Abschnitts: Überschrift links, Zähler oder Aktion rechts,
+   darunter die Linie, an der sich alles ausrichtet. */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-ink);
 }
 
 p {
@@ -183,75 +238,120 @@ a {
   max-width: var(--content-narrow);
 }
 
-.button--primary {
+/* Zeilen in Listen und Tabellen. Hover ist ein Flächenwechsel, keine
+   Bewegung und kein Schatten: die Zeile darf nicht wandern, während man
+   mit dem Blick die Spalten daneben abgleicht. */
+.row-link {
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-line-soft);
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.row-link:hover {
+  background: var(--color-surface-muted);
+}
+
+/* Eckig und flach. v3 kennt keinen Auftrieb: was gedrückt werden kann,
+   zeigt das über einen Flächenwechsel, nicht über einen Schatten. */
+.button--primary,
+.button--secondary {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 30px;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.4rem;
-  border: 1px solid var(--color-brand-blue-dark);
-  border-radius: var(--radius-pill);
-  background: var(--color-brand-blue-dark);
-  box-shadow: 0 10px 24px rgba(88, 125, 141, 0.22);
-  color: var(--color-white);
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-ink);
+  border-radius: 0;
   font: inherit;
-  font-family: var(--font-display);
   font-size: var(--font-size-sm);
-  font-weight: 650;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   text-decoration: none;
   cursor: pointer;
   transition:
-    transform var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-normal) var(--ease-standard),
-    background-color var(--duration-normal) var(--ease-standard);
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
 }
 
-.button--primary:hover {
-  background: var(--color-heading-strong);
-  box-shadow: 0 14px 30px rgba(48, 79, 91, 0.26);
-  transform: translateY(-2px);
+.button--primary {
+  background: var(--color-ink);
+  color: var(--color-white);
 }
 
-.button--primary:disabled {
-  opacity: 0.6;
+.button--primary:hover:not(:disabled) {
+  background: #2f332a;
+  border-color: #2f332a;
+}
+
+.button--secondary {
+  border-color: var(--color-line-strong);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.button--secondary:hover:not(:disabled) {
+  border-color: var(--color-ink);
+}
+
+.button--primary:disabled,
+.button--secondary:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
-  transform: none;
 }
 
-.button--primary:focus-visible {
-  outline: 3px solid rgba(79, 143, 168, 0.35);
-  outline-offset: 2px;
+/* Eine Textaktion ohne Rahmen: "Filter aufheben", "Verlauf", "Schließen".
+   In v3 tragen diese die halbe Interaktion. */
+.link-action {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-4);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 
+.link-action:hover {
+  color: var(--color-ink);
+}
+
+/* Eingabefelder sind Unterstriche, keine Kästen — dieselbe Linienlogik wie
+   der Rest des Rasters. Der Rahmen eines Kastens wäre hier eine zweite,
+   konkurrierende Struktur. */
 input,
 select,
 textarea {
   width: 100%;
-  min-height: 46px;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.9);
+  padding: 0 0 0.15rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-line-strong);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text);
   font: inherit;
-  transition:
-    border-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
 textarea {
-  min-height: 160px;
   resize: vertical;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--color-focus);
-  background: var(--color-white);
+  border-bottom-color: var(--color-ink);
   outline: none;
-  box-shadow: 0 0 0 4px rgba(79, 143, 168, 0.14);
+}
+
+/* Tastaturfokus bleibt sichtbar — der Unterstrich allein ist zu wenig
+   Unterschied, um ihn quer über die Seite zu verfolgen. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
