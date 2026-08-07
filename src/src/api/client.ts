@@ -82,6 +82,10 @@ export interface DocSummary {
   created: string;
   correspondent_name: string | null;
   document_type_name: string | null;
+  /** Slug aus der Tag-Taxonomie. Beschriftung über `categoryLabel()`. */
+  category: string | null;
+  /** Aus einem `OBJ-…`-Tag in Paperless. Null, solange dort keines gepflegt ist. */
+  object_name: string | null;
   tags: TagRef[];
   status: string;
   due_date: string | null;
@@ -92,6 +96,7 @@ export interface Deadline {
   document_id: number;
   title: string;
   correspondent_name: string | null;
+  object_name: string | null;
   due_date: string;
   days_until: number;
 }
@@ -101,9 +106,24 @@ export interface ChartBucket {
   data: number[];
 }
 
+/** Die Zahlen hinter der Kennzahlenzeile. Die Unterzeilen formuliert KpiTileRow daraus. */
+export interface DashboardKpis {
+  open: number;
+  urgent: number;
+  overdue: number;
+  untagged: number;
+  recent_7d: number;
+  total: number;
+  open_new_7d: number;
+  urgent_new_today: number;
+  overdue_oldest_days: number;
+  recent_7d_tagged: number;
+}
+
 export interface DashboardOverview {
-  kpis: Record<string, number>;
-  by_status: Record<string, DocSummary[]>;
+  kpis: DashboardKpis;
+  queue: DocSummary[];
+  objects: string[];
   deadlines: Deadline[];
   recent: DocSummary[];
   charts: Record<string, ChartBucket>;
@@ -150,6 +170,8 @@ async function streamChat(
 
 export const api = {
   getDocument: (id: number) => request<PaperlessDocument>(`/documents/${id}`),
+  searchDocuments: (query: string) =>
+    request<DocumentList>(`/documents/?query=${encodeURIComponent(query)}`),
   getDocumentDetail: (id: number) => request<DocSummary>(`/documents/${id}/detail`),
   getDashboardOverview: () => request<DashboardOverview>("/dashboard/overview"),
   streamChat,

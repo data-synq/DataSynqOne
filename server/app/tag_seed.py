@@ -24,6 +24,11 @@ TAXONOMY: list[tuple[str, str]] = [
 
 STATUS_TAGS = {"open", "in-progress", "done", "urgent", "overdue"}
 
+# Der Rest der Taxonomie: worum es in einem Dokument geht, nicht wo es steht.
+# Paperless' eigenes `document_type` bleibt im Bestand fast überall leer —
+# die Kategorie eines Vorgangs steht hier, in den Tags.
+CATEGORY_TAGS = [name for name, _ in TAXONOMY if name not in STATUS_TAGS]
+
 
 async def seed_tags() -> None:
     """Ensure the tag taxonomy exists in Paperless.

@@ -2,7 +2,6 @@
 import { onMounted } from "vue";
 import { useChatStore } from "../stores/chat";
 import { useSessionsStore } from "../stores/sessions";
-import IconTrash from "./icons/IconTrash.vue";
 
 const chatStore = useChatStore();
 const sessionsStore = useSessionsStore();
@@ -20,8 +19,7 @@ function remove(id: string, event: MouseEvent) {
 }
 
 function relativeDate(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diffMs / 86_400_000);
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
   if (days <= 0) return "Heute";
   if (days === 1) return "Gestern";
   if (days < 7) return `vor ${days} Tagen`;
@@ -30,104 +28,96 @@ function relativeDate(iso: string): string {
 </script>
 
 <template>
-  <div class="history-panel">
-    <p v-if="sessionsStore.loading" class="status">Lade...</p>
-    <ul class="sessions">
-      <li
-        v-for="s in sessionsStore.items"
-        :key="s.id"
-        :class="['session-item', { 'session-item--active': s.id === chatStore.sessionId }]"
-        @click="select(s.id)"
-      >
-        <div class="session-item__text">
-          <span class="session-item__title">{{ s.title }}</span>
-          <span class="session-item__date">{{ relativeDate(s.updated_at) }}</span>
-        </div>
-        <button type="button" class="session-item__delete" aria-label="Löschen" @click="remove(s.id, $event)">
-          <IconTrash />
-        </button>
-      </li>
-    </ul>
-    <p v-if="!sessionsStore.loading && !sessionsStore.items.length" class="status">
+  <div class="history">
+    <p class="eyebrow history__head">Gespeicherte Chats</p>
+
+    <p v-if="sessionsStore.loading" class="history__status mono">Lade …</p>
+    <p v-else-if="!sessionsStore.items.length" class="history__status mono">
       Noch keine gespeicherten Chats.
     </p>
+
+    <div
+      v-for="s in sessionsStore.items"
+      :key="s.id"
+      class="history__row row-link"
+      role="button"
+      tabindex="0"
+      @click="select(s.id)"
+      @keydown.enter="select(s.id)"
+    >
+      <span class="history__title" :class="{ 'history__title--active': s.id === chatStore.sessionId }">
+        {{ s.title }}
+      </span>
+      <span class="mono history__date">{{ relativeDate(s.updated_at) }}</span>
+      <button type="button" class="link-action history__delete" aria-label="Chat löschen" @click="remove(s.id, $event)">
+        Löschen
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.history-panel {
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-2) var(--page-padding);
-  max-height: 240px;
+.history {
+  flex: none;
+  max-height: 216px;
   overflow-y: auto;
+  padding: 0.75rem 1.25rem 0.875rem;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-canvas);
 }
 
-.sessions {
-  list-style: none;
+.history__head {
+  margin: 0 0 0.5rem;
+}
+
+.history__status {
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
 }
 
-.session-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+.history__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4375rem 0 0.5rem;
 }
 
-.session-item:hover {
-  background: var(--color-surface-muted);
+.history__row:hover {
+  background: #f1f1ec;
 }
 
-.session-item--active {
-  background: var(--color-surface-muted);
-  box-shadow: var(--shadow-sm);
-}
-
-.session-item__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.session-item__title {
-  color: var(--color-heading-strong);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+.history__title {
+  font-size: var(--font-size-md);
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-item__date {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+.history__title--active {
+  color: var(--color-ink);
+  font-weight: 500;
 }
 
-.session-item__delete {
-  flex: none;
-  border: none;
-  background: none;
-  cursor: pointer;
-  opacity: 0.6;
-  color: var(--color-text-muted);
-  display: flex;
+.history__date {
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
 }
 
-.session-item__delete:hover {
+/* Löschen ist endgültig und steht deshalb nicht permanent im Blick — es
+   erscheint erst, wenn die Zeile angesteuert wird. */
+.history__delete {
+  font-size: var(--font-size-2xs);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.history__row:hover .history__delete,
+.history__delete:focus-visible {
   opacity: 1;
-  color: var(--color-error);
 }
 
-.status {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  margin: 0.4rem 0;
+.history__delete:hover {
+  color: var(--color-error);
 }
 </style>

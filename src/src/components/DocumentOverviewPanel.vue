@@ -2,11 +2,10 @@
 import { computed, ref, watch } from "vue";
 import { useChatStore } from "../stores/chat";
 import { api, type PaperlessDocument, type DocSummary } from "../api/client";
-import { formatDaysUntil } from "../utils/dates";
-import IconClose from "./icons/IconClose.vue";
-import IconChat from "./icons/IconChat.vue";
+import { categoryLabel, STATUS_COLORS, STATUS_LABELS } from "../theme/statusColors";
+import { daysUntil, formatDate, formatDaysUntil } from "../utils/dates";
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8001";
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
 
 const store = useChatStore();
 const document = ref<PaperlessDocument | null>(null);
@@ -20,6 +19,35 @@ const fileUrl = computed(() => {
   return panel?.type === "document" ? `${BASE_URL}/documents/${panel.documentId}/file` : "";
 });
 
+const due = computed(() => {
+  if (!detail.value?.due_date) return null;
+  const days = daysUntil(detail.value.due_date);
+  return {
+    days,
+    label: formatDaysUntil(days),
+    date: formatDate(detail.value.due_date),
+    color: days < 0 ? STATUS_COLORS.overdue : days <= 3 ? STATUS_COLORS.urgent : "var(--color-text)",
+  };
+});
+
+const statusColor = computed(() =>
+  detail.value ? (STATUS_COLORS[detail.value.status] ?? "var(--color-text)") : "var(--color-text)",
+);
+
+// Nur die inhaltlichen Schlagworte. Frist, Objekt, Status und Kategorie
+// stehen bereits als eigene Zeilen darüber — ein zweites Mal als Rohtag
+// wären sie Rauschen in genau dem Feld, das den Rest tragen soll.
+const STRUCTURAL_TAG = /^(due:|obj-)/i;
+const topicTags = computed(
+  () =>
+    detail.value?.tags.filter(
+      (t) =>
+        !STRUCTURAL_TAG.test(t.name) &&
+        t.name !== detail.value?.status &&
+        t.name !== detail.value?.category,
+    ) ?? [],
+);
+
 watch(
   () => (store.sidePanel?.type === "document" ? store.sidePanel.documentId : null),
   async (id) => {
@@ -30,7 +58,10 @@ watch(
     if (id === null) return;
     loading.value = true;
     try {
-      [document.value, detail.value] = await Promise.all([api.getDocument(id), api.getDocumentDetail(id)]);
+      [document.value, detail.value] = await Promise.all([
+        api.getDocument(id),
+        api.getDocumentDetail(id),
+      ]);
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {
@@ -46,56 +77,85 @@ function ask() {
 </script>
 
 <template>
-  <div v-if="store.sidePanel !== null" class="panel-backdrop" @click.self="store.closePanel()">
-    <div class="panel">
-      <button class="panel__close" @click="store.closePanel()" aria-label="Schließen"><IconClose /></button>
+  <div v-if="store.sidePanel !== null" class="scrim" @click.self="store.closePanel()">
+    <div class="doc" role="dialog" aria-modal="true" aria-label="Dokument">
+      <div class="doc__head">
+        <div class="doc__ident">
+          <span class="mono doc__id">DOK-{{ store.sidePanel.documentId }}</span>
+          <span v-if="detail" class="doc__title">{{ detail.title }}</span>
+          <span
+            v-if="due && due.days < 0"
+            class="mono doc__flag"
+            :style="{ color: due.color, borderColor: due.color }"
+          >
+            Frist {{ due.label }}
+          </span>
+        </div>
+        <button type="button" class="link-action" @click="store.closePanel()">Schließen</button>
+      </div>
 
-      <template v-if="store.sidePanel.type === 'document'">
-        <p v-if="loading" class="status">Lade...</p>
-        <p v-if="error" class="status status--error">{{ error }}</p>
+      <p v-if="loading" class="doc__status mono">Lade …</p>
+      <p v-else-if="error" class="doc__status doc__status--error">{{ error }}</p>
 
-        <div v-if="document && detail" class="panel__body">
-          <aside class="panel__meta">
-            <h2>{{ detail.title }}</h2>
-            <p class="meta">Erstellt: {{ detail.created?.slice(0, 10) }}</p>
-            <p v-if="detail.correspondent_name" class="meta">Korrespondent: {{ detail.correspondent_name }}</p>
-            <p v-if="detail.document_type_name" class="meta">Typ: {{ detail.document_type_name }}</p>
+      <template v-if="document && detail">
+        <aside class="doc__meta">
+          <dl class="facts">
+            <dt class="mono">Status</dt>
+            <dd :style="{ color: statusColor }">{{ STATUS_LABELS[detail.status] ?? detail.status }}</dd>
 
-            <span class="status-pill">{{ detail.status }}</span>
-            <p v-if="detail.due_date" class="due-pill">
-              Frist: {{ detail.due_date }} ({{ formatDaysUntil(Math.round((new Date(detail.due_date).getTime() - Date.now()) / 86400000)) }})
-            </p>
+            <template v-if="due">
+              <dt class="mono">Frist</dt>
+              <dd :style="{ color: due.color }">{{ due.date }} · {{ due.label }}</dd>
+            </template>
 
-            <div class="panel__tags">
-              <span v-for="tag in detail.tags" :key="tag.id" class="tag-pill" :style="{ '--tag-color': tag.color }">
-                {{ tag.name }}
-              </span>
-            </div>
+            <dt class="mono">Erstellt</dt>
+            <dd>{{ formatDate(detail.created) }}</dd>
 
-            <button type="button" class="ask-button" @click="ask"><IconChat /> Im Chat nachfragen</button>
-          </aside>
+            <dt class="mono">Korrespondent</dt>
+            <dd>{{ detail.correspondent_name ?? "—" }}</dd>
 
-          <div class="panel__doc">
-            <div class="tabs">
-              <button
-                type="button"
-                :class="['tab', { 'tab--active': activeTab === 'original' }]"
-                @click="activeTab = 'original'"
-              >
-                Original
-              </button>
-              <button
-                type="button"
-                :class="['tab', { 'tab--active': activeTab === 'text' }]"
-                @click="activeTab = 'text'"
-              >
-                Text (OCR)
-              </button>
-            </div>
+            <dt class="mono">Kategorie</dt>
+            <dd>{{ categoryLabel(detail.category) }}</dd>
 
-            <iframe v-if="activeTab === 'original'" :src="fileUrl" class="pdf-frame" title="Originaldokument" />
-            <pre v-else class="content">{{ document.content }}</pre>
+            <template v-if="detail.document_type_name">
+              <dt class="mono">Typ</dt>
+              <dd>{{ detail.document_type_name }}</dd>
+            </template>
+
+            <dt class="mono">Objekt</dt>
+            <dd>{{ detail.object_name ?? "—" }}</dd>
+
+            <dt class="mono">Schlagworte</dt>
+            <dd>{{ topicTags.length ? topicTags.map((t) => t.name).join(", ") : "—" }}</dd>
+          </dl>
+
+          <div class="doc__actions">
+            <button type="button" class="button--primary" @click="ask">Im Assistenten nachfragen</button>
           </div>
+        </aside>
+
+        <div class="doc__body">
+          <div class="tabs">
+            <button
+              type="button"
+              class="tabs__tab"
+              :class="{ 'tabs__tab--active': activeTab === 'original' }"
+              @click="activeTab = 'original'"
+            >
+              Original
+            </button>
+            <button
+              type="button"
+              class="tabs__tab"
+              :class="{ 'tabs__tab--active': activeTab === 'text' }"
+              @click="activeTab = 'text'"
+            >
+              Text (OCR)
+            </button>
+          </div>
+
+          <iframe v-if="activeTab === 'original'" :src="fileUrl" class="doc__frame" title="Originaldokument" />
+          <div v-else class="doc__text">{{ document.content }}</div>
         </div>
       </template>
     </div>
@@ -103,175 +163,175 @@ function ask() {
 </template>
 
 <style scoped>
-.panel-backdrop {
+.scrim {
   position: fixed;
   inset: 0;
-  background: rgba(22, 24, 20, 0.34);
-  z-index: 30;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-3);
-  box-sizing: border-box;
+  padding: 1.75rem;
+  background: rgba(22, 24, 20, 0.32);
 }
 
-.panel {
-  position: relative;
-  width: min(1100px, 92vw);
-  height: min(88vh, 900px);
-  background: var(--surface-glass-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-4);
-  box-sizing: border-box;
+.doc {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
+  width: min(1180px, 100%);
+  height: min(880px, 100%);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-strong);
+}
+
+.doc__head {
+  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-inline: 1.25rem;
+  border-bottom: 1px solid var(--color-line);
 }
 
-.panel__body {
+.doc__ident {
   display: flex;
-  gap: var(--space-4);
-  min-height: 0;
-  flex: 1;
-}
-
-.panel__meta {
-  flex: 0 0 38%;
-  min-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow-y: auto;
-}
-
-.panel__doc {
-  flex: 1;
+  align-items: baseline;
+  gap: 0.625rem;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
-.panel__close {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  min-height: 44px;
-  min-width: 44px;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-white);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  font-size: var(--font-size-base);
-  color: var(--color-text-muted);
+.doc__id {
+  flex: none;
 }
 
-.meta {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+.doc__title {
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc__flag {
+  flex: none;
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid currentColor;
+  font-size: var(--font-size-2xs);
+}
+
+.doc__status {
+  grid-column: 1 / -1;
+  padding: 1.25rem;
   margin: 0;
 }
 
-.status-pill {
-  align-self: flex-start;
-  border-radius: var(--radius-pill);
-  padding: 0.2rem 0.8rem;
-  font-size: var(--font-size-xs);
-  font-family: var(--font-display);
-  font-weight: 600;
-  background: var(--color-white);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-heading-strong);
-  text-transform: uppercase;
-}
-
-.due-pill {
-  margin: 0;
-  font-size: var(--font-size-xs);
+.doc__status--error {
   color: var(--color-error);
 }
 
-.panel__tags {
+.doc__meta {
+  display: flex;
+  flex-direction: column;
+  padding: 1.375rem 1.25rem;
+  border-right: 1px solid var(--color-line);
+  overflow-y: auto;
+}
+
+/* Label links, Wert rechts, auf einer Achse: eine Dokumentenakte liest man
+   spaltenweise nach dem Feld, das man sucht, nicht der Reihe nach. */
+.facts {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 0.5625rem 0.75rem;
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.facts dt {
+  font-size: var(--font-size-2xs);
+  letter-spacing: 0.04em;
+  color: var(--color-ink-5);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.doc__actions {
+  margin-top: auto;
+  padding-top: 1.25rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  gap: 0.625rem;
 }
 
-.tag-pill {
-  border-radius: var(--radius-pill);
-  padding: 0.1rem 0.6rem;
-  font-size: var(--font-size-xs);
-  font-family: var(--font-display);
-  font-weight: 600;
-  background: var(--color-white);
-  color: var(--tag-color, var(--color-text-muted));
-  border: 1px solid var(--tag-color, var(--color-border));
-}
-
-.ask-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: auto;
-  align-self: flex-start;
-  border: 1px solid var(--color-brand-blue-strong);
-  background: var(--color-cream-light);
-  color: var(--color-brand-blue-dark);
-  border-radius: var(--radius-pill);
-  padding: 0.5rem 1rem;
-  font: inherit;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
+.doc__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1rem 1.25rem 1.25rem;
 }
 
 .tabs {
+  flex: none;
   display: flex;
-  gap: 0.4rem;
-  margin-bottom: var(--space-2);
+  gap: 1.25rem;
+  border-bottom: 1px solid var(--color-line);
 }
 
-.tab {
-  border: 1px solid transparent;
-  background: none;
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--radius-pill);
-  color: var(--color-text-muted);
+.tabs__tab {
+  margin-bottom: -1px;
+  padding: 0 0 0.4375rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   font: inherit;
-  font-family: var(--font-display);
   font-size: var(--font-size-sm);
   font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-4);
   cursor: pointer;
 }
 
-.tab--active {
-  color: var(--color-brand-blue-dark);
-  background: var(--color-white);
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-sm);
+.tabs__tab--active {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-ink);
 }
 
-.pdf-frame {
+.doc__frame {
   flex: 1;
   min-height: 0;
   width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  margin-top: 1rem;
+  border: 1px solid var(--color-line-soft);
 }
 
-.content {
+.doc__text {
   flex: 1;
+  min-height: 0;
+  margin-top: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--color-line-soft);
   overflow-y: auto;
+  max-width: 68ch;
   white-space: pre-wrap;
-  background: var(--color-white);
-  border: 1px solid var(--color-border);
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  font-family: var(--font-body);
-  margin: 0;
+  line-height: var(--line-height-prose);
+  color: var(--color-text);
 }
 
-.status--error {
-  color: var(--color-error);
+@media (max-width: 900px) {
+  .doc {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px auto minmax(0, 1fr);
+  }
+
+  .doc__meta {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
 }
 </style>

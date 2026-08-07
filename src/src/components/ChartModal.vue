@@ -4,7 +4,6 @@ import { Chart, registerables } from "chart.js";
 import { Bar, Line, Pie, Doughnut } from "vue-chartjs";
 import { useChatStore } from "../stores/chat";
 import { PALETTE } from "../theme/chartPalette";
-import IconClose from "./icons/IconClose.vue";
 
 Chart.register(...registerables);
 
@@ -51,9 +50,11 @@ const chartOptions = computed(() => {
 
 <template>
   <div v-if="store.activeChart && chartComponent" class="chart-backdrop" @click.self="store.closeChart()">
-    <div class="chart-dialog">
-      <button class="chart-dialog__close" @click="store.closeChart()" aria-label="Schließen"><IconClose /></button>
-      <h2>{{ store.activeChart.title }}</h2>
+    <div class="chart-dialog" role="dialog" aria-modal="true">
+      <div class="chart-dialog__head">
+        <h2>{{ store.activeChart.title }}</h2>
+        <button type="button" class="link-action" @click="store.closeChart()">Schließen</button>
+      </div>
       <div :class="['chart-wrap', { 'chart-wrap--round': isRound }]">
         <component :is="chartComponent" :data="chartData!" :options="chartOptions" />
       </div>
@@ -65,8 +66,8 @@ const chartOptions = computed(() => {
 .chart-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(22, 24, 20, 0.34);
-  z-index: 30;
+  background: rgba(22, 24, 20, 0.32);
+  z-index: 70;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,37 +76,28 @@ const chartOptions = computed(() => {
 }
 
 .chart-dialog {
-  position: relative;
   width: min(640px, 92vw);
   max-height: 80vh;
-  background: var(--surface-glass-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-4);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-strong);
+  padding: var(--space-3);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.chart-dialog h2 {
-  margin: 0;
-  padding-right: 2.5rem;
+.chart-dialog__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-ink);
 }
 
-.chart-dialog__close {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  min-height: 44px;
-  min-width: 44px;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-white);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  font-size: var(--font-size-base);
-  color: var(--color-text-muted);
+.chart-dialog__head h2 {
+  margin: 0;
 }
 
 .chart-wrap {
