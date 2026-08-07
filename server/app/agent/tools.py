@@ -411,6 +411,48 @@ TOOL_DEFINITIONS = [
 
 RESPONSES_TOOL_DEFINITIONS = [{"type": "function", **t["function"]} for t in TOOL_DEFINITIONS]
 
+# Werkzeuge, die Paperless verändern. Wer 'agent:write' nicht hat, bekommt sie gar
+# nicht erst angeboten (tools_for) und käme mit einem erratenen Namen auch nicht
+# durch (call_tool). Ein neues schreibendes Werkzeug gehört hier hinein — der Test
+# in server/tests/test_permissions.py schlägt fehl, wenn das jemand vergisst.
+WRITE_TOOLS = frozenset(
+    {
+        "create_tag",
+        "create_correspondent",
+        "create_document_type",
+        "assign_tags_to_document",
+        "set_document_correspondent",
+        "set_document_document_type",
+        "rename_document",
+        "delete_tag",
+        "delete_correspondent",
+        "delete_document_type",
+        "bulk_update_documents",
+    }
+)
+
+PERMISSION_DENIED = {
+    "error": (
+        "Dafuer fehlt die Berechtigung: in der Rolle Betrachter stehen nur lesende und "
+        "auswertende Werkzeuge zur Verfuegung. Aenderungen an Dokumenten, Tags, "
+        "Korrespondenten und Dokumenttypen kann nur ein Bearbeiter oder Administrator "
+        "vornehmen."
+    )
+}
+
+
+def tools_for(can_write: bool) -> list[dict]:
+    """Die Werkzeugliste, die das Modell zu sehen bekommt.
+
+    Fuer einen Betrachter werden die schreibenden Werkzeuge entfernt, statt sie erst
+    beim Aufruf abzulehnen: sonst versucht das Modell den Aufruf und berichtet dem
+    Nutzer hinterher von Aenderungen, die nie stattgefunden haben.
+    """
+    if can_write:
+        return RESPONSES_TOOL_DEFINITIONS
+    return [t for t in RESPONSES_TOOL_DEFINITIONS if t["name"] not in WRITE_TOOLS]
+
+
 _CHART_TYPES = {"bar", "line", "pie", "doughnut"}
 
 
@@ -623,7 +665,13 @@ async def _bulk_update_documents(arguments: dict) -> dict:
     return {"document_count": len(document_ids), "applied": applied, "errors": errors}
 
 
-async def call_tool(name: str, arguments: dict) -> dict:
+async def call_tool(name: str, arguments: dict, can_write: bool = True) -> dict:
+    # Zweite Verteidigungslinie hinter tools_for: das Modell kann einen Werkzeugnamen
+    # auch erfinden. Als Tool-Ergebnis statt als Exception, damit der Agent dem Nutzer
+    # erklaeren kann, warum nichts passiert ist, statt den Stream abzubrechen.
+    if not can_write and name in WRITE_TOOLS:
+        return PERMISSION_DENIED
+
     if name == "search_documents":
         return await _search_with_expansion(
             arguments.get("query"),

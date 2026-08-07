@@ -25,12 +25,16 @@ maintenance requests and correspondence become quick to find, analyze and act on
   search across documents by amount (`search_documents_by_amount`); calculations run through a
   dedicated calculator tool instead of the model doing arithmetic itself.
 - **Document management via chat** — create/assign/delete tags, correspondents and document types,
-  rename documents and run bulk updates.
+  rename documents and run bulk updates. Only for roles that carry the `agent:write` permission;
+  a viewer is not even offered the writing tools.
+- **Accounts and roles** — per-person sign-in with three roles (administrator, editor, viewer)
+  and a user management screen. See [Users and roles](#users-and-roles).
 - **Dashboard** — KPIs, a status board (open / in-progress / done / urgent / overdue), deadlines,
   recent correspondence and charts.
 - **Charts in chat** — the agent can produce bar, line, pie and doughnut charts via `create_chart`,
   rendered in the frontend.
-- **Chat history** — sessions are stored in Postgres and can be reopened.
+- **Chat history** — sessions are stored in Postgres, private to the person who created them,
+  and can be reopened.
 - **Automatic tag taxonomy** — on startup a set of default tags (status and category tags with
   colors) is seeded into Paperless.
 
@@ -101,7 +105,9 @@ make env
 
 That copies every `env/*.env.example` to `env/*.env`. Then edit them:
 
-- **`env/backend.env`** — set `PAPERLESS_API_TOKEN` and `OPENAI_API_KEY`.
+- **`env/backend.env`** — set `PAPERLESS_API_TOKEN`, `OPENAI_API_KEY` and the first
+  administrator in `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Without those two nobody can sign in;
+  see [Users and roles](#users-and-roles).
 - **`env/paperless.env`** — set the passwords, `PAPERLESS_SECRET_KEY` and `USERMAP_UID`/`USERMAP_GID`
   (your own `id -u` / `id -g`).
 - **`env/postgres.env`** — set `POSTGRES_PASSWORD`; it must match `PAPERLESS_DBPASS`.
@@ -135,13 +141,15 @@ For semantic search to work, the Paperless documents must be synced into the vec
 once:
 
 ```bash
-make sync          # or: curl -X POST http://localhost:8001/sync/documents
+make sync
 ```
 
-Check the status:
+The sync endpoints require the `sync:run` permission, so `make sync` signs in with
+`ADMIN_EMAIL`/`ADMIN_PASSWORD` from `env/backend.env` first and reuses that session for both calls.
+If the admin password has been changed since, pass the current one:
 
 ```bash
-curl http://localhost:8001/sync/status
+ADMIN_PASSWORD='…' make sync
 ```
 
 The sync computes embeddings for new/changed documents (content-hash based), skips unchanged
@@ -151,9 +159,21 @@ ones and removes orphaned entries.
 
 ## API overview
 
+Every endpoint except `GET /health` requires a signed-in session; the ones marked below need a
+specific permission on top of that.
+
 | Method & path                      | Description                                          |
 |------------------------------------|------------------------------------------------------|
-| `GET  /health`                     | Health check                                         |
+| `GET  /health`                     | Health check (the only public route)                 |
+| `POST /auth/login`                 | Sign in, sets the session cookie                     |
+| `POST /auth/logout`                | Sign out                                             |
+| `GET  /auth/me`                    | Current account, role and resolved permissions       |
+| `POST /auth/password`              | Change your own password                             |
+| `GET  /users/`                     | List accounts — `users:manage`                       |
+| `POST /users/`                     | Create an account — `users:manage`                   |
+| `PATCH /users/{id}`                | Name, role, active flag — `users:manage`             |
+| `POST /users/{id}/password`        | Reset someone's password — `users:manage`            |
+| `DELETE /users/{id}`               | Delete an account — `users:manage`                   |
 | `POST /agent/chat`                 | Chat with the agent (Server-Sent Events)             |
 | `GET  /sessions`                   | List chat sessions                                   |
 | `GET  /sessions/{id}`              | History of a session                                 |
@@ -164,10 +184,52 @@ ones and removes orphaned entries.
 | `GET  /documents/{id}/file`        | Original file                                         |
 | `GET  /documents/meta/*`           | Correspondents / document types / tags               |
 | `GET  /dashboard/overview`         | KPIs, status board, deadlines, charts                |
-| `POST /sync/documents`             | Sync embeddings                                      |
-| `GET  /sync/status`                | Sync status                                          |
+| `POST /sync/documents`             | Sync embeddings — `sync:run`                         |
+| `GET  /sync/status`                | Sync status — `sync:run`                             |
 
 Full interactive documentation at `http://localhost:8001/docs`.
+
+---
+
+## Users and roles
+
+Accounts live in the app's own database (the `users` table in the vector database), independent of
+the Paperless user list. Signing in returns an HttpOnly session cookie; the session itself is stored
+server-side, so deactivating someone or changing their role takes effect on their very next request
+instead of whenever a token happens to expire.
+
+### The three roles
+
+| Permission | Administrator | Editor | Viewer |
+|---|:--:|:--:|:--:|
+| `documents:read` — dashboard, search, document view | ✓ | ✓ | ✓ |
+| `agent:chat` — talk to the assistant | ✓ | ✓ | ✓ |
+| `agent:write` — let the assistant change Paperless | ✓ | ✓ | – |
+| `sync:run` — trigger the embedding sync | ✓ | – | – |
+| `users:manage` — manage accounts | ✓ | – | – |
+
+A viewer keeps the assistant — searching, summarizing, amount analysis and charts all work. What
+they lose are the writing tools: those are removed from the tool list before it ever reaches the
+model, so the assistant says plainly that it cannot make the change instead of claiming a success
+that never happened. A second check in `call_tool` refuses the call even if the model invents the
+name. The matrix itself lives in `server/app/auth/permissions.py`.
+
+Chat sessions belong to the person who started them. Nobody else sees them — administrators
+included — and a request carrying someone else's session id gets a 404, not a 403.
+
+### The first sign-in
+
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `env/backend.env` **before the first start**. While the
+`users` table is empty, the backend creates exactly that one administrator and flags the password
+as one that must be changed. Without both values no account is created and nobody can sign in —
+there is deliberately no built-in default password.
+
+Every further account is created by an administrator under *Benutzer verwalten* in the account menu,
+with a start password that the new user has to replace on first sign-in.
+
+Guard rails worth knowing: the last active administrator cannot be demoted, deactivated or deleted,
+and nobody can deactivate or delete their own account. After ten failed sign-in attempts an account
+is locked for fifteen minutes; an administrator can lift that early by resetting the password.
 
 ---
 
@@ -247,6 +309,10 @@ Design guidelines: see [`src/DESIGN.md`](src/DESIGN.md).
 | `EMBEDDING_MODEL`    | `text-embedding-3-small`                          | Embedding model (1536 dimensions)    |
 | `DATABASE_URL`       | `postgresql://brain:brain@vectordb:5432/brain`    | Vector database                      |
 | `CORS_ORIGINS`       | `["http://localhost:8080"]`                        | Allowed frontend origins             |
+| `ADMIN_EMAIL`        | –                                                 | Bootstrap administrator, first start only |
+| `ADMIN_PASSWORD`     | –                                                 | Its password; change after first login |
+| `SESSION_COOKIE_SECURE` | `true`                                         | Set to `false` only for plain-HTTP dev |
+| `SESSION_TTL_HOURS`  | `12`                                              | Session lifetime, refreshed on each request |
 
 ---
 

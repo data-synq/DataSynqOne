@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BACKEND_PORT=8001
+BACKEND_PORT=${BACKEND_PORT:-8001}
 FRONTEND_PORT=5173
 VENV="$ROOT/server/.venv"
 DEPS_STAMP="$VENV/.deps-stamp"
@@ -180,12 +180,44 @@ run_all() {
 	wait -n
 }
 
+# --- utilities --------------------------------------------------------------
+
+# The sync endpoints need the `sync:run` permission, so this signs in first and
+# keeps the session cookie for the two calls. ADMIN_EMAIL/ADMIN_PASSWORD from
+# backend.env are used because that account is an administrator by definition;
+# once its password has been changed, pass the new one in the environment.
+run_sync() {
+	local base="http://localhost:$BACKEND_PORT" jar status
+	jar=$(mktemp)
+	trap 'rm -f "$jar"' RETURN
+
+	load_backend_env
+	if [ -z "${ADMIN_EMAIL:-}" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
+		log "ADMIN_EMAIL/ADMIN_PASSWORD are not set in env/backend.env — cannot sign in."
+		return 1
+	fi
+
+	status=$(curl -sS -o /dev/null -w '%{http_code}' -c "$jar" -X POST "$base/auth/login" \
+		-H 'Content-Type: application/json' \
+		--data "$(printf '{"email":"%s","password":"%s"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD")")
+	if [ "$status" != "200" ]; then
+		log "sign-in failed (HTTP $status). Has the admin password been changed since?"
+		return 1
+	fi
+
+	curl -fsS -b "$jar" -X POST "$base/sync/documents" && printf '\n'
+	curl -fsS -b "$jar" "$base/sync/status" && printf '\n'
+}
+
 # --- entry point ------------------------------------------------------------
 
 case "${1:-all}" in
 env)
 	ensure_env_files || exit 1
 	log "env files are in place"
+	;;
+sync)
+	run_sync
 	;;
 install)
 	rm -f "$DEPS_STAMP"

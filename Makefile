@@ -61,8 +61,7 @@ ps: ## Show container status
 # --- utilities --------------------------------------------------------------
 
 sync: ## Index Paperless documents into the vector database
-	curl -fsS -X POST http://localhost:8001/sync/documents && echo
-	curl -fsS http://localhost:8001/sync/status && echo
+	@scripts/dev.sh sync
 
 clean: ## Remove server/.venv, src/node_modules and src/dist
 	rm -rf server/.venv src/node_modules src/dist

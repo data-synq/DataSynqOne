@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { api, type PaperlessDocument } from "../../api/client";
 import { useChatStore } from "../../stores/chat";
 import { useDashboardStore } from "../../stores/dashboard";
+import { useAuthStore } from "../../stores/auth";
 
 const chat = useChatStore();
 const dashboard = useDashboardStore();
+const auth = useAuthStore();
+const router = useRouter();
+
+const accountOpen = ref(false);
+
+async function signOut() {
+  accountOpen.value = false;
+  await auth.logout();
+  await router.replace("/login");
+}
 
 const query = ref("");
 const results = ref<PaperlessDocument[]>([]);
@@ -104,10 +116,47 @@ function reset() {
       </div>
     </div>
 
-    <button type="button" class="button--primary assistant-button" @click="chat.openChat()">
-      <span class="assistant-button__dot" />
-      Assistent
-    </button>
+    <div class="topbar__actions">
+      <button type="button" class="button--primary assistant-button" @click="chat.openChat()">
+        <span class="assistant-button__dot" />
+        Assistent
+      </button>
+
+      <div class="account" @keydown.esc="accountOpen = false">
+        <button
+          type="button"
+          class="account__trigger"
+          :aria-expanded="accountOpen"
+          aria-haspopup="menu"
+          @click="accountOpen = !accountOpen"
+        >
+          <span class="account__name">{{ auth.user?.display_name }}</span>
+          <span class="account__role mono">{{ auth.user?.role_label }}</span>
+        </button>
+
+        <!-- Ein Klick daneben schließt das Menü. Der Overlay liegt unter dem Menü,
+             aber über allem anderen, damit kein Klick ins Leere geht. -->
+        <div v-if="accountOpen" class="account__backdrop" @click="accountOpen = false" />
+
+        <div v-if="accountOpen" class="account__menu" role="menu">
+          <RouterLink to="/profil" class="account__item" role="menuitem" @click="accountOpen = false">
+            Passwort ändern
+          </RouterLink>
+          <RouterLink
+            v-if="auth.can('users:manage')"
+            to="/admin/benutzer"
+            class="account__item"
+            role="menuitem"
+            @click="accountOpen = false"
+          >
+            Benutzer verwalten
+          </RouterLink>
+          <button type="button" class="account__item" role="menuitem" @click="signOut">
+            Abmelden
+          </button>
+        </div>
+      </div>
+    </div>
   </header>
 </template>
 
@@ -232,5 +281,82 @@ function reset() {
   width: 6px;
   height: 6px;
   background: #7fbfa2;
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.account {
+  position: relative;
+}
+
+.account__trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  line-height: 1.2;
+  text-align: right;
+  cursor: pointer;
+}
+
+.account__name {
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.account__role {
+  font-size: var(--font-size-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Fängt den Klick neben dem Menü ab. Unsichtbar, aber über der Seite. */
+.account__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.account__menu {
+  position: absolute;
+  z-index: 31;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  display: grid;
+  min-width: 12rem;
+  background: var(--color-white);
+  border: 1px solid var(--color-line-strong);
+}
+
+.account__item {
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-line-soft);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-md);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.account__item:last-child {
+  border-bottom: 0;
+}
+
+.account__item:hover {
+  background: var(--color-surface-muted);
 }
 </style>

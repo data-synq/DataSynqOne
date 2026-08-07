@@ -4,14 +4,62 @@
 // `||` treats "" as unset and falls back to the local backend for dev builds.
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
 
+/** Die Sitzung ist abgelaufen oder wurde entzogen. Der Router-Guard fängt das ab. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Nicht angemeldet");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/** Eine Fehlermeldung des Backends, die direkt angezeigt werden darf. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/** Wird beim ersten 401 aufgerufen, damit der Auth-Store aufräumen kann. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler;
+}
+
+/** Zieht `detail` aus einer FastAPI-Fehlerantwort, sonst den nackten Text. */
+async function errorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const detail = JSON.parse(text).detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg);
+  } catch {
+    /* keine JSON-Antwort — dann eben der Rohtext */
+  }
+  return text || `Request failed: ${res.status}`;
+}
+
+async function failure(res: Response): Promise<never> {
+  if (res.status === 401) {
+    onUnauthorized?.();
+    throw new UnauthorizedError();
+  }
+  throw new ApiError(await errorMessage(res), res.status);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
+    // Das Session-Cookie muss auch dann mitgehen, wenn jemand am Vite-Proxy
+    // vorbei direkt auf :8001 zugreift — dort ist der Aufruf cross-origin.
+    credentials: "include",
     ...init,
   });
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${await res.text()}`);
-  }
+  if (!res.ok) await failure(res);
   return res.json() as Promise<T>;
 }
 
@@ -139,11 +187,11 @@ async function streamChat(
   const res = await fetch(`${BASE_URL}/agent/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ message, history, session_id: sessionId }),
   });
-  if (!res.ok || !res.body) {
-    throw new Error(`Request failed: ${res.status} ${await res.text()}`);
-  }
+  if (!res.ok) await failure(res);
+  if (!res.body) throw new ApiError("Der Server hat keine Antwort geliefert.", res.status);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -168,7 +216,61 @@ async function streamChat(
   }
 }
 
+export type PermissionName =
+  | "documents:read"
+  | "agent:chat"
+  | "agent:write"
+  | "sync:run"
+  | "users:manage";
+
+export interface AppUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "admin" | "editor" | "viewer";
+  role_label: string;
+  is_active: boolean;
+  must_change_password: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface CurrentUser extends AppUser {
+  permissions: PermissionName[];
+}
+
 export const api = {
+  login: (email: string, password: string) =>
+    request<CurrentUser>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  logout: () => request<{ status: string }>("/auth/logout", { method: "POST" }),
+  me: () => request<CurrentUser>("/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<CurrentUser>("/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+
+  listUsers: () => request<AppUser[]>("/users/"),
+  createUser: (payload: {
+    email: string;
+    display_name: string;
+    role: string;
+    password: string;
+  }) => request<AppUser>("/users/", { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (
+    id: string,
+    payload: { display_name?: string; role?: string; is_active?: boolean },
+  ) => request<AppUser>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  resetUserPassword: (id: string, password: string) =>
+    request<AppUser>(`/users/${id}/password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  deleteUser: (id: string) => request<{ status: string }>(`/users/${id}`, { method: "DELETE" }),
+
   getDocument: (id: number) => request<PaperlessDocument>(`/documents/${id}`),
   searchDocuments: (query: string) =>
     request<DocumentList>(`/documents/?query=${encodeURIComponent(query)}`),

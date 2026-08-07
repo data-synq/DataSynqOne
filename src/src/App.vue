@@ -3,19 +3,26 @@ import AppTopBar from "./components/dashboard/AppTopBar.vue";
 import DocumentOverviewPanel from "./components/DocumentOverviewPanel.vue";
 import ChartModal from "./components/ChartModal.vue";
 import ChatDrawer from "./components/ChatDrawer.vue";
+import { useAuthStore } from "./stores/auth";
+
+// Die Anmeldeseite steht für sich: ohne Kopfzeile, ohne Assistenten, ohne
+// Dokumentpanel — nichts davon hat ohne angemeldeten Benutzer eine Bedeutung.
+const auth = useAuthStore();
 </script>
 
 <template>
   <div class="app-shell">
-    <AppTopBar />
+    <AppTopBar v-if="auth.isAuthenticated" />
 
     <main>
       <RouterView />
     </main>
 
-    <DocumentOverviewPanel />
-    <ChartModal />
-    <ChatDrawer />
+    <template v-if="auth.isAuthenticated">
+      <DocumentOverviewPanel />
+      <ChartModal />
+      <ChatDrawer />
+    </template>
   </div>
 </template>
 

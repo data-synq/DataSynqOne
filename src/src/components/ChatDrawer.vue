@@ -5,9 +5,11 @@ import { useDashboardStore } from "../stores/dashboard";
 import ToolTrace from "./ToolTrace.vue";
 import ChatHistoryPanel from "./ChatHistoryPanel.vue";
 import { renderMarkdown } from "../markdown";
+import { useAuthStore } from "../stores/auth";
 
 const store = useChatStore();
 const dashboard = useDashboardStore();
+const auth = useAuthStore();
 const input = ref("");
 const messagesEl = ref<HTMLDivElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
@@ -103,6 +105,12 @@ async function useSuggestion(text: string) {
     </div>
 
     <ChatHistoryPanel v-if="store.historyOpen" />
+
+    <!-- Ehrlicher, als es den Nutzer erst durch eine Absage des Assistenten
+         herausfinden zu lassen, nachdem er seine Bitte formuliert hat. -->
+    <p v-if="!auth.can('agent:write')" class="assistant__readonly mono">
+      Nur-Lese-Zugang: der Assistent recherchiert und wertet aus, ändert aber nichts.
+    </p>
 
     <div ref="messagesEl" class="assistant__messages">
       <p v-if="!store.messages.length" class="assistant__empty mono">
@@ -232,6 +240,15 @@ async function useSuggestion(text: string) {
 
 .assistant__empty {
   margin: 0;
+}
+
+/* Ein Zustandsband, keine Warnung: die Rolle ist so gewollt, nicht kaputt. */
+.assistant__readonly {
+  margin: 0;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--color-line-soft);
+  background: var(--color-surface-muted);
+  color: var(--color-ink-4);
 }
 
 /* Sprechblasen sind hier falsch: es ist kein Gespräch unter Gleichen, sondern
