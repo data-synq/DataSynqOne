@@ -3,6 +3,18 @@ name: build-and-push
 on:
   push:
     branches: [main]
+    # A tag is what actually ships. Pushing to main only builds images, so a
+    # broken build surfaces on the merge that caused it; nothing reaches the
+    # server until someone cuts a release here.
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Superseded main builds are pointless - only the newest image matters.
+# Tag builds are never cancelled: each one is a release someone deliberately
+# cut, and bump-infra below only runs if both of its images really exist.
+concurrency:
+  group: build-and-push-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -11,6 +23,8 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,11 +38,16 @@ jobs:
         id: meta
         with:
           images: ghcr.io/data-synq/datasynqone-backend
+          # `latest` deliberately means "tip of main" and is pinned by nobody -
+          # DataSynqInfra pins the semver tag, see its README on why a floating
+          # tag there would land a new image on some unrelated future redeploy.
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: ./server
           push: true
@@ -37,6 +56,8 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,14 +72,90 @@ jobs:
         with:
           images: ghcr.io/data-synq/datasynqone-frontend
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: ./src
           push: true
+          # Baked into the JS bundle at build time - the frontend has no
+          # runtime config, so this is the one place the backend URL is set.
           build-args: |
             VITE_BACKEND_URL=https://api.data-synq.com
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # Points DataSynqInfra's two image pins at this release, which is what
+  # actually triggers a deploy: its timer polls that repo's main every 3
+  # minutes and applies what it finds. Everything downstream from here -
+  # data snapshot, healthcheck gate, automatic rollback to the previous pin
+  # on failure - is that pipeline's job, not this workflow's.
+  #
+  # `needs` both builds on purpose: the two images are built from one commit
+  # and always move together, and a half-bumped compose file would deploy a
+  # frontend against a backend it was never built against.
+  bump-infra:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      # INFRA_BUMP_TOKEN is a fine-grained PAT scoped to DataSynqInfra with
+      # Contents: write, and nothing else. Note what this means: anyone who
+      # can push a v* tag here can commit to that repo, and it reaches the
+      # server within three minutes.
+      - uses: actions/checkout@v4
+        with:
+          repository: data-synq/DataSynqInfra
+          ref: main
+          token: ${{ secrets.INFRA_BUMP_TOKEN }}
+          # Full history: the rebase below needs a real one to rebase onto,
+          # and checkout's default depth of 1 turns that into a shallow-repo
+          # error at exactly the moment it matters (main moved mid-build).
+          fetch-depth: 0
+
+      - name: Point both image pins at this release
+        env:
+          BACKEND_DIGEST: ${{ needs.backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ needs.frontend.outputs.digest }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+
+          sed -i -E "s#(ghcr\.io/data-synq/datasynqone-(backend|frontend):)[^[:space:]]+#\1${version}#" \
+            docker/docker-compose.yml
+
+          # A sed that matches nothing looks exactly like "already up to
+          # date" one step further down, so check the result instead of
+          # trusting the substitution - e.g. a pin rewritten by hand to a
+          # digest (@sha256:...) has no tag for this pattern to replace.
+          for image in backend frontend; do
+            grep -q "image: ghcr.io/data-synq/datasynqone-${image}:${version}$" docker/docker-compose.yml \
+              || { echo "::error::could not rewrite the ${image} pin - did the image: line in docker/docker-compose.yml change shape?"; exit 1; }
+          done
+
+          if git diff --quiet -- docker/docker-compose.yml; then
+            echo "pins already at ${version}, nothing to commit"
+            exit 0
+          fi
+
+          {
+            printf 'Release DataSynq One %s\n\n' "$version"
+            printf 'Automated pin bump from DataSynqOne'"'"'s release workflow, cut as\n'
+            printf 'tag %s (%s). The deploy timer picks this up\n' "$GITHUB_REF_NAME" "$GITHUB_SHA"
+            printf 'within three minutes.\n\n'
+            printf 'Digests this version resolves to, so a moved tag would show up\n'
+            printf 'as a mismatch later:\n'
+            printf '  backend  %s\n' "$BACKEND_DIGEST"
+            printf '  frontend %s\n' "$FRONTEND_DIGEST"
+          } > "${RUNNER_TEMP}/bump-msg"
+
+          git config user.name "datasynqone-release"
+          git config user.email "release@data-synq.com"
+          git commit -q -a -F "${RUNNER_TEMP}/bump-msg"
+
+          # main may have moved while the images were building.
+          git pull --rebase --quiet origin main
+          git push origin HEAD:main
