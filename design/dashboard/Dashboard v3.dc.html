@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    body { margin: 0; background: #f9f8f4; }
+    a { color: #1f6b4f; text-decoration: none; }
+    a:hover { color: #17503c; text-decoration: underline; }
+    ::selection { background: #dbe7e0; }
+  </style>
+</helmet>
+
+<div style="min-height: 100vh; background: #f9f8f4; color: #24261f; font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased;">
+
+  <header data-screen-label="Kopfzeile" style="display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; height: 58px; padding: 0 40px; background: #ffffff; border-bottom: 1px solid #dcdcd4;">
+    <div style="display: flex; align-items: baseline; gap: 10px;">
+      <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #161814; white-space: nowrap;">DataSynq One</span>
+      <span style="width: 1px; height: 12px; background: #d2d2c8; display: inline-block;"></span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; color: #7c8076;">Hausverwaltung Berger &amp; Sohn</span>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 12px; min-width: 0; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);">
+      <span style="font-size: 13px; font-weight: 500; color: #161814; padding: 19px 0 17px; border-bottom: 2px solid #161814; cursor: default;">Dashboard</span>
+      <span style="font-size: 13px; color: #6f7369; padding: 19px 0 17px; border-bottom: 2px solid transparent; cursor: pointer;" style-hover="color: #161814;">Dokumente</span>
+      <span style="font-size: 13px; color: #6f7369; padding: 19px 0 17px; border-bottom: 2px solid transparent; cursor: pointer;" style-hover="color: #161814;">Fristen</span>
+      <span style="font-size: 13px; color: #6f7369; padding: 19px 0 17px; border-bottom: 2px solid transparent; cursor: pointer;" style-hover="color: #161814;">Objekte</span>
+    </nav>
+    <div style="display: flex; align-items: center; gap: 18px;">
+      <input type="text" placeholder="Suche in 1.284 Dokumenten" style="width: clamp(40px, 10vw, 230px); height: 26px; padding: 0 0 2px; border: 0; border-bottom: 1px solid #d2d2c8; background: transparent; font: inherit; font-size: 13px; color: #24261f; outline: none;" style-focus="border-bottom-color: #161814;" />
+      <button type="button" onClick="{{ toggleDrawer }}" style="display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border: 1px solid #161814; border-radius: 0; background: #161814; color: #ffffff; font: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; cursor: pointer;" style-hover="background: #2f332a; border-color: #2f332a;">
+        <span style="width: 6px; height: 6px; background: #7fbfa2; display: inline-block;"></span>
+        Assistent
+      </button>
+    </div>
+  </header>
+
+  <main style="max-width: 1480px; margin: 0 auto; padding: 0 40px 72px;">
+
+    <section data-screen-label="Kopf" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 36px 0 24px;">
+      <div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8f84;">Freitag, 7. August 2026</div>
+        <h1 style="margin: 10px 0 0; font-size: 30px; font-weight: 400; line-height: 1.25; letter-spacing: -0.015em; color: #161814; max-width: 36ch; text-wrap: pretty;">Zwei Fristen sind überschritten, drei Vorgänge werden diese Woche fällig.</h1>
+      </div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84; white-space: nowrap; padding-bottom: 6px; text-align: right;">1.284 Dokumente · 4 Objekte<br />zuletzt synchronisiert 10:24 Uhr</div>
+    </section>
+
+    <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; border-top: 1px solid #dcdcd4; border-bottom: 1px solid #dcdcd4; padding: 0;">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #8b8f84; padding: 10px 14px 10px 0;">Objekt</span>
+      <sc-for list="{{ objChips }}" as="o" hint-placeholder-count="5">
+        <button type="button" onClick="{{ o.pick }}" style="border: 0; background: transparent; font: inherit; font-size: 12.5px; padding: 10px 12px; cursor: pointer; white-space: nowrap; color: {{ o.color }}; box-shadow: {{ o.rule }};" style-hover="color: #161814;">{{ o.label }}</button>
+      </sc-for>
+    </div>
+
+    <section data-screen-label="Kennzahlen" style="display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #dcdcd4;">
+      <button type="button" onClick="{{ focusOpen }}" style="text-align: left; padding: 26px 24px 24px 0; border: 0; background: transparent; font: inherit; cursor: pointer; opacity: {{ openOpacity }}; transition: opacity 160ms ease;">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: #7c8076;">Offen</div>
+        <div style="margin-top: 6px; font-size: 50px; font-weight: 300; line-height: 1; letter-spacing: -0.02em; color: #161814; font-variant-numeric: tabular-nums;">38</div>
+        <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">+6 diese Woche</div>
+      </button>
+      <button type="button" onClick="{{ focusUrgent }}" style="text-align: left; padding: 26px 24px 24px; border: 0; border-left: 1px solid #dcdcd4; background: transparent; font: inherit; cursor: pointer; opacity: {{ urgentOpacity }}; transition: opacity 160ms ease;">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: #7c8076;">Dringend</div>
+        <div style="margin-top: 6px; font-size: 50px; font-weight: 300; line-height: 1; letter-spacing: -0.02em; color: #8a5a12; font-variant-numeric: tabular-nums;">7</div>
+        <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">3 heute hinzugekommen</div>
+      </button>
+      <button type="button" onClick="{{ focusOverdue }}" style="text-align: left; padding: 26px 24px 24px; border: 0; border-left: 1px solid #dcdcd4; background: transparent; font: inherit; cursor: pointer; opacity: {{ overdueOpacity }}; transition: opacity 160ms ease;">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: #7c8076;">Überfällig</div>
+        <div style="margin-top: 6px; font-size: 50px; font-weight: 300; line-height: 1; letter-spacing: -0.02em; color: #8f3323; font-variant-numeric: tabular-nums;">2</div>
+        <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8f3323;">älteste 13 Tage</div>
+      </button>
+      <button type="button" onClick="{{ clearFocus }}" style="text-align: left; padding: 26px 24px 24px; border: 0; border-left: 1px solid #dcdcd4; background: transparent; font: inherit; cursor: pointer;">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: #7c8076;">Ohne Tag</div>
+        <div style="margin-top: 6px; font-size: 50px; font-weight: 300; line-height: 1; letter-spacing: -0.02em; color: #161814; font-variant-numeric: tabular-nums;">14</div>
+        <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">zu klassifizieren</div>
+      </button>
+      <button type="button" onClick="{{ clearFocus }}" style="text-align: left; padding: 26px 0 24px 24px; border: 0; border-left: 1px solid #dcdcd4; background: transparent; font: inherit; cursor: pointer;">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: #7c8076;">Neu (7 Tage)</div>
+        <div style="margin-top: 6px; font-size: 50px; font-weight: 300; line-height: 1; letter-spacing: -0.02em; color: #161814; font-variant-numeric: tabular-nums;">26</div>
+        <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">19 automatisch verschlagwortet</div>
+      </button>
+    </section>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0;">
+
+      <section data-screen-label="Als Nächstes" style="padding: 26px 36px 32px 0; border-right: 1px solid #dcdcd4;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #161814;">
+          <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #161814;">Als Nächstes</h2>
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">{{ queueLabel }}</span>
+            <sc-if value="{{ isFiltered }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ clearFocus }}" style="border: 0; background: transparent; padding: 0; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #1f6b4f; cursor: pointer;" style-hover="text-decoration: underline;">Filter aufheben</button>
+            </sc-if>
+          </div>
+        </div>
+        <sc-for list="{{ queue }}" as="q" hint-placeholder-count="8">
+          <div onClick="{{ q.open }}" style="display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: baseline; gap: 0 12px; padding: 12px 8px 13px 0; border-bottom: 1px solid #e6e6de; cursor: pointer;" style-hover="background: #f4f4f0;">
+            <span style="width: 8px; height: 8px; background: {{ q.dot }}; display: inline-block; position: relative; top: -1px; justify-self: start;"></span>
+            <div style="min-width: 0;">
+              <div style="font-size: 13.5px; color: #161814; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ q.t }}</div>
+              <div style="margin-top: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8b8f84; letter-spacing: 0.01em;">{{ q.meta }}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; color: {{ q.badgeColor }};">{{ q.badge }}</div>
+              <div style="margin-top: 4px; font-size: 11.5px; color: #6f7369; white-space: nowrap;">{{ q.next }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+
+      <aside data-screen-label="Fristen" style="padding: 26px 0 32px 32px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #161814;">
+          <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #161814;">Fristen</h2>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">{{ deadlineHint }}</span>
+        </div>
+        <sc-for list="{{ deadGroups }}" as="g" hint-placeholder-count="3">
+          <div style="margin-top: 14px;">
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: {{ g.headColor }}; padding-bottom: 5px; border-bottom: 1px solid #dcdcd4;">{{ g.head }}</div>
+            <sc-for list="{{ g.items }}" as="d" hint-placeholder-count="2">
+              <div onClick="{{ d.open }}" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 12px; padding: 9px 0 10px; border-bottom: 1px solid #e6e6de; cursor: pointer;" style-hover="background: #f4f4f0;">
+                <div style="min-width: 0;">
+                  <div style="font-size: 13px; color: #24261f; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ d.t }}</div>
+                  <div style="margin-top: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8b8f84;">{{ d.k }}</div>
+                </div>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; color: {{ d.color }};">{{ d.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </aside>
+    </div>
+
+    <sc-if value="{{ showTrends }}" hint-placeholder-val="{{ true }}">
+      <section data-screen-label="Trends" style="display: grid; grid-template-columns: minmax(0, 1fr) 340px; border-top: 1px solid #dcdcd4;">
+        <div style="padding: 26px 36px 32px 0; border-right: 1px solid #dcdcd4;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; padding-bottom: 8px; border-bottom: 2px solid #161814;">
+            <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #161814;">Eingang je Kalenderwoche</h2>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">Ø 22 Dokumente / Woche</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(8, 1fr); align-items: end; gap: 14px; height: 148px;">
+            <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8">
+              <div style="display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 6px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6f7369; font-variant-numeric: tabular-nums;">{{ w.n }}</span>
+                <div style="height: {{ w.h }}; background: {{ w.fill }};"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 14px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #dcdcd4;">
+            <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8b8f84;">{{ w.w }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding: 26px 0 32px 32px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; padding-bottom: 8px; border-bottom: 2px solid #161814;">
+            <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #161814;">Kategorien</h2>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">letzte 60 Tage</span>
+          </div>
+          <sc-for list="{{ dist }}" as="c" hint-placeholder-count="5">
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 12px; padding: 7px 0;">
+              <div>
+                <div style="font-size: 12.5px; color: #24261f;">{{ c.label }}</div>
+                <div style="margin-top: 5px; height: 3px; background: #e6e6de;">
+                  <div style="height: 3px; width: {{ c.pct }}; background: {{ c.fill }};"></div>
+                </div>
+              </div>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-align: right; color: #6f7369; font-variant-numeric: tabular-nums;">{{ c.n }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <section data-screen-label="Korrespondenz" style="border-top: 1px solid #dcdcd4; padding-top: 26px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #161814;">
+        <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #161814;">Aktuelle Korrespondenz</h2>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84; cursor: pointer;" style-hover="color: #161814;">alle 1.284 Dokumente →</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 92px minmax(0, 1fr) 190px 130px 130px 110px; gap: 0 12px; padding: 0 0 7px; border-bottom: 1px solid #161814;">
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Datum</span>
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Titel</span>
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Korrespondent</span>
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Objekt</span>
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Kategorie</span>
+        <span style="font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: #7c8076;">Status</span>
+      </div>
+      <sc-for list="{{ recent }}" as="r" hint-placeholder-count="8">
+        <div onClick="{{ r.open }}" style="display: grid; grid-template-columns: 92px minmax(0, 1fr) 190px 130px 130px 110px; gap: 0 12px; align-items: baseline; padding: 9px 0 10px; border-bottom: 1px solid #e6e6de; cursor: pointer;" style-hover="background: #f4f4f0;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #6f7369; font-variant-numeric: tabular-nums; white-space: nowrap;">{{ r.d }}</span>
+          <span style="font-size: 13.5px; color: #24261f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.t }}</span>
+          <span style="font-size: 13px; color: #52564c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.k }}</span>
+          <span style="font-size: 12.5px; color: #6f7369; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.obj }}</span>
+          <span style="font-size: 12.5px; color: #6f7369;">{{ r.cat }}</span>
+          <span style="display: inline-flex; align-items: baseline; gap: 7px; font-size: 12.5px; color: {{ r.color }};"><span style="width: 7px; height: 7px; background: {{ r.color }}; display: inline-block; position: relative; top: -1px;"></span>{{ r.st }}</span>
+        </div>
+      </sc-for>
+    </section>
+  </main>
+
+  <aside data-screen-label="Assistent" style="position: fixed; top: 0; right: 0; bottom: 0; width: 460px; background: #ffffff; border-left: 1px solid #dcdcd4; display: flex; flex-direction: column; z-index: 40; transform: {{ drawerTransform }}; transition: transform 220ms cubic-bezier(0.2, 0, 0, 1); box-shadow: -12px 0 32px rgba(22, 24, 20, 0.06);">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 52px; padding: 0 20px; border-bottom: 1px solid #dcdcd4; flex: none;">
+      <div style="display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #161814;">Assistent</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8b8f84;">Kontext: {{ drawerContext }}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <button type="button" onClick="{{ toggleHistory }}" style="border: 0; background: transparent; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{ historyColor }}; cursor: pointer; padding: 2px 0;" style-hover="color: #161814;">Verlauf</button>
+        <button type="button" style="border: 0; background: transparent; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7369; cursor: pointer; padding: 2px 0;" style-hover="color: #161814;">Neu</button>
+        <button type="button" onClick="{{ closeDrawer }}" style="border: 0; background: transparent; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7369; cursor: pointer; padding: 2px 0;" style-hover="color: #161814;">Schließen</button>
+      </div>
+    </div>
+
+    <sc-if value="{{ historyOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="flex: none; max-height: 216px; overflow-y: auto; padding: 12px 20px 14px; border-bottom: 1px solid #dcdcd4; background: #f9f8f4;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8f84; margin-bottom: 8px;">Gespeicherte Chats</div>
+        <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 12px; padding: 7px 0 8px; border-bottom: 1px solid #e6e6de; cursor: pointer;" style-hover="background: #f1f1ec;">
+            <span style="font-size: 13px; color: {{ s.color }}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.title }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8b8f84; white-space: nowrap;">{{ s.date }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
+      <div style="padding-bottom: 18px; border-bottom: 1px solid #e6e6de;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8f84; margin-bottom: 6px;">Sie</div>
+        <div style="font-size: 13.5px; color: #24261f;">Welche Fristen laufen diesen Monat für Lindenstr. 14 ab?</div>
+      </div>
+      <div style="padding: 18px 0; border-bottom: 1px solid #e6e6de;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #1f6b4f; margin-bottom: 8px;">Antwort</div>
+        <div style="margin-bottom: 12px; padding: 8px 10px; background: #f4f4f0;">
+          <button type="button" onClick="{{ toggleTrace }}" style="display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 0; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6f7369; cursor: pointer;" style-hover="color: #161814;">{{ traceHead }}</button>
+          <sc-if value="{{ traceOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 5px;">
+              <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding-top: 5px; border-top: 1px solid #e2e2da;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #24261f; overflow: hidden; text-overflow: ellipsis;">suchen(objekt="Lindenstr. 14", frist="offen")</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #1f6b4f; white-space: nowrap;">fertig</span>
+              </div>
+              <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding-top: 5px; border-top: 1px solid #e2e2da;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #24261f; overflow: hidden; text-overflow: ellipsis;">fristen(zeitraum="2026-08")</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #1f6b4f; white-space: nowrap;">fertig</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <div style="font-size: 13.5px; color: #24261f; line-height: 1.55;">Zwei Fristen im August: die Widerspruchsfrist zur Betriebskostenabrechnung 2024 ist seit 13 Tagen überschritten, das Prüfprotokoll der Gasleitung ist am 10. August fällig.</div>
+        <div style="margin-top: 12px; padding: 10px 12px; background: #f4f4f0; border-left: 2px solid #1f6b4f;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6f7369;">Quellen</div>
+          <div onClick="{{ openDocFromDrawer }}" style="margin-top: 4px; font-size: 12.5px; color: #24261f; cursor: pointer;" style-hover="text-decoration: underline;">DOK-4611 Widerspruch Betriebskosten 2024</div>
+          <div onClick="{{ openDocFromDrawer }}" style="margin-top: 2px; font-size: 12.5px; color: #24261f; cursor: pointer;" style-hover="text-decoration: underline;">DOK-4836 Prüfprotokoll Gasleitung</div>
+        </div>
+      </div>
+      <div style="padding-top: 18px;">
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8f84; margin-bottom: 8px;">Vorschläge</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 13px; color: #1f6b4f; cursor: pointer;" style-hover="text-decoration: underline;">Entwurf für Widerspruch aufsetzen</span>
+          <span style="font-size: 13px; color: #1f6b4f; cursor: pointer;" style-hover="text-decoration: underline;">Alle Dokumente von Techem zeigen</span>
+          <span style="font-size: 13px; color: #1f6b4f; cursor: pointer;" style-hover="text-decoration: underline;">Nebenkosten 2025 mit 2024 vergleichen</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: none; padding: 14px 20px 18px; border-top: 1px solid #dcdcd4;">
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px;">
+        <input type="text" placeholder="Frage zur Verwaltung stellen" style="width: 100%; height: 32px; padding: 0 0 4px; border: 0; border-bottom: 1px solid #d2d2c8; background: transparent; font: inherit; font-size: 13.5px; color: #24261f; outline: none;" style-focus="border-bottom-color: #161814;" />
+        <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #161814; background: transparent; color: #161814; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;" style-hover="background: #161814; color: #ffffff;">Senden</button>
+      </div>
+      <div style="margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #a0a498;">Antworten mit Quellenangabe aus 1.284 Dokumenten</div>
+    </div>
+  </aside>
+
+  <sc-if value="{{ docOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeDoc }}" data-screen-label="Dokument-Detail" style="position: fixed; inset: 0; z-index: 60; background: rgba(22, 24, 20, 0.32); display: flex; align-items: center; justify-content: center; padding: 28px;">
+      <div onClick="{{ stop }}" style="width: min(1180px, 100%); height: min(880px, 100%); background: #ffffff; border: 1px solid #c9cbc2; display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: 52px minmax(0, 1fr);">
+        <div style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; border-bottom: 1px solid #dcdcd4;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8b8f84;">DOK-4611</span>
+            <span style="font-size: 13.5px; font-weight: 500; color: #161814;">Widerspruch Betriebskosten 2024</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8f3323; padding: 2px 7px; border: 1px solid #8f3323;">Frist 13 Tage über</span>
+          </div>
+          <button type="button" onClick="{{ closeDoc }}" style="border: 0; background: transparent; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7369; cursor: pointer; padding: 4px;" style-hover="color: #161814;">Schließen</button>
+        </div>
+        <aside style="border-right: 1px solid #dcdcd4; padding: 22px 20px; overflow-y: auto; display: flex; flex-direction: column;">
+          <div style="display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 9px 12px; font-size: 12.5px;">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Status</span>
+            <span style="color: #8f3323;">Überfällig</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Frist</span>
+            <span style="color: #8f3323;">25.07.2026 · 13 Tage über</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Erstellt</span>
+            <span style="color: #24261f;">18.06.2026</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Korrespondent</span>
+            <span style="color: #24261f;">Haas &amp; Partner Rechtsanwälte</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Typ</span>
+            <span style="color: #24261f;">Schriftsatz</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Objekt</span>
+            <span style="color: #24261f;">Lindenstr. 14, WE 09</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84;">Schlagworte</span>
+            <span style="color: #24261f;">Rechtliches, Betriebskosten, Widerspruch</span>
+          </div>
+          <div style="margin-top: 22px; padding-top: 16px; border-top: 1px solid #e6e6de;">
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8b8f84; margin-bottom: 8px;">Verlauf</div>
+            <div style="display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: #52564c;">
+              <span>18.06. eingegangen, automatisch verschlagwortet</span>
+              <span>20.06. Frist 25.07. erkannt und gesetzt</span>
+              <span>25.07. Frist verstrichen, als überfällig markiert</span>
+            </div>
+          </div>
+          <div style="margin-top: auto; padding-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button type="button" onClick="{{ openDrawer }}" style="height: 30px; padding: 0 12px; border: 1px solid #161814; background: #161814; color: #ffffff; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;" style-hover="background: #2f332a; border-color: #2f332a;">Im Assistenten nachfragen</button>
+            <button type="button" style="height: 30px; padding: 0 12px; border: 1px solid #c9cbc2; background: transparent; color: #24261f; font: inherit; font-size: 12px; cursor: pointer;" style-hover="border-color: #161814;">Erledigt</button>
+            <button type="button" style="border: 0; background: transparent; padding: 0; font: inherit; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6f7369; cursor: pointer;" style-hover="color: #161814;">Frist ändern</button>
+          </div>
+        </aside>
+        <div style="min-width: 0; display: flex; flex-direction: column; padding: 16px 20px 20px;">
+          <div style="display: flex; gap: 20px; border-bottom: 1px solid #dcdcd4; flex: none;">
+            <button type="button" onClick="{{ showOriginal }}" style="border: 0; background: transparent; padding: 0 0 7px; font: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; color: {{ tabOriginalColor }}; border-bottom: 2px solid {{ tabOriginalRule }}; margin-bottom: -1px;">Original</button>
+            <button type="button" onClick="{{ showText }}" style="border: 0; background: transparent; padding: 0 0 7px; font: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; color: {{ tabTextColor }}; border-bottom: 2px solid {{ tabTextRule }}; margin-bottom: -1px;">Text (OCR)</button>
+          </div>
+          <sc-if value="{{ showingOriginal }}" hint-placeholder-val="{{ true }}">
+            <div style="flex: 1; min-height: 0; margin-top: 16px; border: 1px solid #e6e6de; background: repeating-linear-gradient(135deg, #f6f6f2 0 8px, #f9f8f4 8px 16px); display: flex; align-items: center; justify-content: center;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.04em; color: #8b8f84;">Original-PDF, Seite 1 von 3</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ showingText }}" hint-placeholder-val="{{ false }}">
+            <div style="flex: 1; min-height: 0; margin-top: 16px; overflow-y: auto; padding: 20px 24px; border: 1px solid #e6e6de; background: #ffffff; max-width: 68ch;">
+              <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: #8b8f84; margin-bottom: 14px;">OCR, Konfidenz 98,2 %</div>
+              <div style="font-size: 13.5px; line-height: 1.7; color: #24261f; text-wrap: pretty;">Haas &amp; Partner Rechtsanwälte, Königsallee 12, 40212 Düsseldorf</div>
+              <div style="margin-top: 14px; font-size: 13.5px; line-height: 1.7; color: #24261f; text-wrap: pretty;">Betreff: Widerspruch gegen die Betriebskostenabrechnung 2024, Objekt Lindenstr. 14, Wohneinheit 09</div>
+              <div style="margin-top: 14px; font-size: 13.5px; line-height: 1.7; color: #24261f; text-wrap: pretty;">Sehr geehrte Damen und Herren, namens und in Vollmacht unserer Mandantin legen wir gegen die Betriebskostenabrechnung vom 14.05.2026 Widerspruch ein. Die Position „Hausmeisterdienste" übersteigt den Vorjahreswert um 62 Prozent, ohne dass eine Leistungsänderung ausgewiesen ist.</div>
+              <div style="margin-top: 14px; font-size: 13.5px; line-height: 1.7; color: #24261f; text-wrap: pretty;">Wir bitten um Vorlage der Einzelbelege gemäß § 259 BGB bis zum 25.07.2026 sowie um Erläuterung des Verteilerschlüssels für die Positionen Wasser und Abwasser.</div>
+              <div style="margin-top: 14px; font-size: 13.5px; line-height: 1.7; color: #24261f;">Mit freundlichen Grüßen, Dr. M. Haas, Rechtsanwalt</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;: {&quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#1f6b4f&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;#1f6b4f&quot;, &quot;#2b4a7d&quot;, &quot;#7a3b2e&quot;, &quot;#4a4a45&quot;]}, &quot;showTrends&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+const OBJEKTE = ["Alle Objekte", "Lindenstr. 14", "Gartenweg 3", "Am Markt 21", "Feldstr. 8"];
+const QUEUE = [
+  { t: "Widerspruch Betriebskosten 2024", k: "Haas & Partner Rechtsanwälte", obj: "Lindenstr. 14", st: "ueberfaellig", badge: "13 Tage über", next: "Widerspruch beantworten" },
+  { t: "Versicherungsfall Sturmschaden Dach", k: "Provinzial", obj: "Gartenweg 3", st: "ueberfaellig", badge: "seit 04.06.", next: "Belege nachreichen" },
+  { t: "Mahnung Grundsteuer Q3", k: "Finanzamt Nord", obj: "Am Markt 21", st: "dringend", badge: "2 Tage über", next: "Zahlung anweisen" },
+  { t: "Kündigung WE 03 zum 30.09.", k: "A. Reinhardt", obj: "Lindenstr. 14", st: "dringend", badge: "bis morgen", next: "Eingang bestätigen" },
+  { t: "Prüfprotokoll Gasleitung", k: "TÜV Rheinland", obj: "Lindenstr. 14", st: "dringend", badge: "in 3 Tagen", next: "Termin bestätigen" },
+  { t: "Schadensmeldung Wasser WE 12", k: "K. Brandt", obj: "Feldstr. 8", st: "offen", badge: "25.07.", next: "Handwerker beauftragen" },
+  { t: "Nebenkostenabrechnung 2025", k: "Stadtwerke Mitte", obj: "Lindenstr. 14", st: "offen", badge: "28.07.", next: "Positionen prüfen" },
+  { t: "Mietvertrag Neuvermietung WE 07", k: "M. Özdemir", obj: "Lindenstr. 14", st: "offen", badge: "27.07.", next: "Gegenzeichnung senden" },
+  { t: "Angebot Treppenhausreinigung", k: "Glanz & Co. GmbH", obj: "Gartenweg 3", st: "offen", badge: "Bindung 9 Tage", next: "Angebot vergleichen" },
+];
+const DEADLINES = [
+  { t: "Widerspruchsfrist Betriebskosten 2024", k: "Haas & Partner", obj: "Lindenstr. 14", days: -13 },
+  { t: "Mahnung Grundsteuer Q3", k: "Finanzamt Nord", obj: "Am Markt 21", days: -2 },
+  { t: "Kündigungsbestätigung WE 03", k: "A. Reinhardt", obj: "Lindenstr. 14", days: 1 },
+  { t: "Prüfprotokoll Gasleitung", k: "TÜV Rheinland", obj: "Lindenstr. 14", days: 3 },
+  { t: "Angebotsbindung Treppenhaus", k: "Glanz & Co. GmbH", obj: "Gartenweg 3", days: 9 },
+  { t: "Heizkostenabrechnung einreichen", k: "Techem", obj: "Feldstr. 8", days: 21 },
+];
+const WEEKS = [["KW 25", 14], ["KW 26", 22], ["KW 27", 17], ["KW 28", 26], ["KW 29", 31], ["KW 30", 19], ["KW 31", 24], ["KW 32", 26]];
+const DIST = [["Betriebskosten", 42], ["Verträge", 26], ["Schadensmeldungen", 18], ["Rechtliches", 9], ["Sonstige", 5]];
+const RECENT = [
+  ["05.08.2026", "Zählerstände Ablesung Q3", "Techem", "Feldstr. 8", "Betriebskosten", "Offen"],
+  ["05.08.2026", "Rechnung Dachrinnenreinigung", "Höhenwerk GmbH", "Gartenweg 3", "Rechnung", "Offen"],
+  ["04.08.2026", "Kündigung WE 03 zum 30.09.", "A. Reinhardt", "Lindenstr. 14", "Kündigung", "Dringend"],
+  ["04.08.2026", "Protokoll Eigentümerversammlung", "WEG Lindenstr. 14", "Lindenstr. 14", "Protokoll", "Erledigt"],
+  ["03.08.2026", "Mahnung Grundsteuer Q3", "Finanzamt Nord", "Am Markt 21", "Steuer", "Dringend"],
+  ["02.08.2026", "Anfrage Stellplatzvermietung", "S. Kowalczyk", "Am Markt 21", "Korrespondenz", "Offen"],
+  ["31.07.2026", "Versicherungsfall Sturmschaden Dach", "Provinzial", "Gartenweg 3", "Versicherung", "Überfällig"],
+  ["30.07.2026", "Bestätigung Wartungsvertrag Aufzug", "LiftService AG", "Lindenstr. 14", "Vertrag", "Erledigt"],
+];
+const ST_COLOR = { "Offen": "#52564c", "Dringend": "#8a5a12", "Überfällig": "#8f3323", "Erledigt": "#1f6b4f" };
+const DOT = { offen: "#c9cbc2", dringend: "#8a5a12", ueberfaellig: "#8f3323" };
+const SESSIONS = [
+  ["Fristen Lindenstr. 14", "Heute"],
+  ["Nebenkosten 2025 prüfen", "Heute"],
+  ["Kündigung WE 03 – Ablauf", "Gestern"],
+  ["Sturmschaden Versicherung", "vor 4 Tagen"],
+  ["Wartungsverträge Übersicht", "24.07.2026"],
+];
+
+class Component extends DCLogic {
+  state = { drawer: false, focus: null, obj: "Alle Objekte", history: false, traceExpanded: false, doc: false, docTab: "original" };
+
+  renderVals() {
+    const accent = this.props.accent ?? "#1f6b4f";
+    const { focus, obj } = this.state;
+    const dim = (k) => (focus && focus !== k ? 0.35 : 1);
+    const max = Math.max(...WEEKS.map((w) => w[1]));
+    const totalDist = DIST.reduce((s, d) => s + d[1], 0);
+    const openDoc = () => this.setState({ doc: true, docTab: "original" });
+
+    const byObj = (it) => obj === "Alle Objekte" || it.obj === obj;
+    const queue = QUEUE.filter(byObj).filter((q) => !focus || q.st === focus).map((q) => ({
+      t: q.t,
+      meta: `${q.k} · ${q.obj}`,
+      badge: q.badge,
+      badgeColor: q.st === "ueberfaellig" ? "#8f3323" : q.st === "dringend" ? "#8a5a12" : "#8b8f84",
+      dot: DOT[q.st],
+      next: q.next,
+      open: openDoc,
+    }));
+
+    const dls = DEADLINES.filter(byObj).map((d) => ({
+      t: d.t, k: `${d.k} · ${d.obj}`, days: d.days,
+      label: d.days < 0 ? `${Math.abs(d.days)} Tage über` : d.days === 0 ? "heute" : d.days === 1 ? "morgen" : `in ${d.days} Tagen`,
+      color: d.days < 0 ? "#8f3323" : d.days <= 3 ? "#8a5a12" : "#6f7369",
+      open: openDoc,
+    }));
+    const deadGroups = [
+      { head: "Überschritten", headColor: "#8f3323", items: dls.filter((d) => d.days < 0) },
+      { head: "Diese Woche", headColor: "#8a5a12", items: dls.filter((d) => d.days >= 0 && d.days <= 7) },
+      { head: "Später", headColor: "#8b8f84", items: dls.filter((d) => d.days > 7) },
+    ].filter((g) => g.items.length);
+
+    const focusNames = { offen: "Offen", dringend: "Dringend", ueberfaellig: "Überfällig" };
+    return {
+      objChips: OBJEKTE.map((label) => ({
+        label,
+        color: obj === label ? "#161814" : "#6f7369",
+        rule: obj === label ? "inset 0 -2px 0 #161814" : "none",
+        pick: () => this.setState({ obj: label }),
+      })),
+      queue,
+      queueLabel: focus ? `gefiltert: ${focusNames[focus]}` : `${queue.length} von 47 Vorgängen`,
+      isFiltered: !!focus || obj !== "Alle Objekte",
+      deadGroups,
+      deadlineHint: `${dls.filter((d) => d.days >= 0 && d.days <= 3).length} in 3 Tagen fällig`,
+      weeks: WEEKS.map(([w, n]) => ({ w, n, h: `${Math.round((n / max) * 100)}%`, fill: n === max ? accent : "#c9cbc2" })),
+      dist: DIST.map(([label, n]) => ({ label, n, pct: `${Math.round((n / totalDist) * 100)}%`, fill: accent })),
+      recent: RECENT.filter((r) => obj === "Alle Objekte" || r[3] === obj).map(([d, t, k, o, cat, st]) => ({ d, t, k, obj: o, cat, st, color: ST_COLOR[st] ?? "#52564c", open: openDoc })),
+      showTrends: this.props.showTrends ?? true,
+      openOpacity: dim("offen"),
+      urgentOpacity: dim("dringend"),
+      overdueOpacity: dim("ueberfaellig"),
+      focusOpen: () => this.setState((s) => ({ focus: s.focus === "offen" ? null : "offen" })),
+      focusUrgent: () => this.setState((s) => ({ focus: s.focus === "dringend" ? null : "dringend" })),
+      focusOverdue: () => this.setState((s) => ({ focus: s.focus === "ueberfaellig" ? null : "ueberfaellig" })),
+      clearFocus: () => this.setState({ focus: null, obj: "Alle Objekte" }),
+      drawerTransform: this.state.drawer ? "translateX(0)" : "translateX(102%)",
+      drawerContext: obj === "Alle Objekte" ? "gesamter Bestand" : obj,
+      toggleDrawer: () => this.setState((s) => ({ drawer: !s.drawer })),
+      closeDrawer: () => this.setState({ drawer: false }),
+      openDrawer: () => this.setState({ drawer: true, doc: false }),
+      openDocFromDrawer: () => this.setState({ doc: true, docTab: "original" }),
+      historyOpen: this.state.history,
+      historyColor: this.state.history ? "#161814" : "#6f7369",
+      toggleHistory: () => this.setState((s) => ({ history: !s.history })),
+      sessions: SESSIONS.map(([title, date], i) => ({ title, date, color: i === 0 ? "#161814" : "#24261f" })),
+      traceOpen: this.state.traceExpanded,
+      traceHead: this.state.traceExpanded ? "2 Tool-Aufrufe ▾" : "2 Tool-Aufrufe ▸",
+      toggleTrace: () => this.setState((s) => ({ traceExpanded: !s.traceExpanded })),
+      docOpen: this.state.doc,
+      closeDoc: () => this.setState({ doc: false }),
+      stop: (e) => e.stopPropagation(),
+      showOriginal: () => this.setState({ docTab: "original" }),
+      showText: () => this.setState({ docTab: "text" }),
+      showingOriginal: this.state.docTab === "original",
+      showingText: this.state.docTab === "text",
+      tabOriginalColor: this.state.docTab === "original" ? "#161814" : "#7c8076",
+      tabOriginalRule: this.state.docTab === "original" ? "#161814" : "transparent",
+      tabTextColor: this.state.docTab === "text" ? "#161814" : "#7c8076",
+      tabTextRule: this.state.docTab === "text" ? "#161814" : "transparent",
+    };
+  }
+}
+</script>
+</body>
+</html>
