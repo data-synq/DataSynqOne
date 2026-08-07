@@ -111,6 +111,10 @@ jobs:
           repository: data-synq/DataSynqInfra
           ref: main
           token: ${{ secrets.INFRA_BUMP_TOKEN }}
+          # Full history: the rebase below needs a real one to rebase onto,
+          # and checkout's default depth of 1 turns that into a shallow-repo
+          # error at exactly the moment it matters (main moved mid-build).
+          fetch-depth: 0
 
       - name: Point both image pins at this release
         env:
