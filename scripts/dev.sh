@@ -23,7 +23,7 @@ COMPOSE=(docker compose -f compose.yml -f compose.dev.yml)
 ENV_FILES=(backend backend.dev paperless postgres vectordb)
 # These templates ship placeholders (tokens, passwords); a freshly created one
 # has to be edited before the stack is usable. The rest have working defaults.
-ENV_NEEDS_EDIT=(backend paperless postgres)
+ENV_NEEDS_EDIT=(backend paperless postgres vectordb)
 
 if [ -t 1 ]; then
 	C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'
@@ -85,19 +85,26 @@ load_env_file() {
 load_backend_env() {
 	load_env_file env/backend.env
 	load_env_file env/backend.dev.env
+	# This script is exclusively the native development entry point. Keeping the
+	# environment explicit prevents a production process from silently inheriting
+	# development validation when ENVIRONMENT was forgotten.
+	export ENVIRONMENT=development
 }
 
 # --- dependencies -----------------------------------------------------------
 
 ensure_backend_deps() {
+	if [ server/requirements.in -nt server/requirements.txt ] || [ server/requirements-dev.in -nt server/requirements-dev.txt ]; then
+		die "backend dependency inputs changed; run 'make lock' before installing"
+	fi
 	if [ ! -x "$VENV/bin/python" ]; then
 		log "creating virtualenv in server/.venv"
 		python3 -m venv "$VENV"
 	fi
-	if [ ! -f "$DEPS_STAMP" ] || [ server/requirements.txt -nt "$DEPS_STAMP" ]; then
+	if [ ! -f "$DEPS_STAMP" ] || [ server/requirements.txt -nt "$DEPS_STAMP" ] || [ server/requirements-dev.txt -nt "$DEPS_STAMP" ]; then
 		log "installing backend dependencies"
 		"$VENV/bin/pip" install --quiet --upgrade pip
-		"$VENV/bin/pip" install --quiet -r server/requirements.txt
+		"$VENV/bin/pip" install --quiet --require-hashes -r server/requirements-dev.txt
 		touch "$DEPS_STAMP"
 	fi
 }
@@ -107,7 +114,7 @@ ensure_frontend_deps() {
 	# one untouched on a no-op install, which would re-run npm on every start.
 	if [ ! -d src/node_modules ] || [ ! -f "$NPM_STAMP" ] || [ src/package-lock.json -nt "$NPM_STAMP" ]; then
 		log "installing frontend dependencies"
-		(cd src && npm install)
+		(cd src && npm ci)
 		touch "$NPM_STAMP"
 	fi
 }
@@ -116,12 +123,14 @@ ensure_frontend_deps() {
 
 start_infra() {
 	command -v docker >/dev/null || die "docker is not installed"
-	log "starting redis, postgres, vectordb, paperless"
+	log "starting redis, postgres, vectordb, paperless (+gotenberg/tika), mailpit"
 	# vectordb first and gated on its healthcheck — the backend opens a pool at
 	# startup. Paperless is only started, never waited for: its cold start takes
 	# ~2 min (start_period: 240s) and tag_seed.py tolerates it being absent.
+	# gotenberg/tika come along via paperless's own depends_on. Mailpit is instant
+	# and needs no gate; it only has to be up before the first invitation goes out.
 	"${COMPOSE[@]}" up -d --wait --wait-timeout 120 vectordb
-	"${COMPOSE[@]}" up -d paperless
+	"${COMPOSE[@]}" up -d paperless mailpit
 }
 
 # --- processes --------------------------------------------------------------
@@ -222,7 +231,8 @@ sync)
 install)
 	rm -f "$DEPS_STAMP"
 	ensure_backend_deps
-	(cd src && npm install)
+	rm -rf src/node_modules
+	ensure_frontend_deps
 	;;
 backend)
 	ensure_env_files || exit 1

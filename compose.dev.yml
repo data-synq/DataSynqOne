@@ -9,3 +9,14 @@ services:
     ports:
       # 5433 to stay clear of a Postgres that may already own 5432 on the host.
       - "5433:5432"
+
+  # Accepts every outgoing mail and delivers none, showing them at
+  # http://localhost:8025 instead. Dev only — the alternative would be testing
+  # invitations and reminders against real inboxes.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI

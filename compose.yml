@@ -29,6 +29,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # Wandelt eingehende .eml-Mails in PDFs, damit Paperless sie im Browser
+  # rendern kann (EML kann das kein Browser nativ). Reiner Konverter, kein
+  # eigener Zustand, keine Ports nach außen — nur im Compose-Netz erreichbar.
+  gotenberg:
+    image: docker.io/gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+    # Der Inhalt kommt aus fremden E-Mails: das interne Chromium soll weder
+    # Skripte ausführen noch Tracking-Pixel oder Remote-Content nachladen.
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  # Extrahiert Text aus dem HTML-Teil einer Mail (und, mit PAPERLESS_TIKA_ENABLED,
+  # aus Office-Dokumenten) für die Volltextsuche.
+  tika:
+    image: docker.io/apache/tika:latest
+    container_name: tika
+    restart: unless-stopped
+
   paperless:
     image: ghcr.io/paperless-ngx/paperless-ngx:latest
     container_name: paperless
@@ -36,6 +57,8 @@ services:
     depends_on:
       - redis
       - postgres
+      - gotenberg
+      - tika
     ports:
       - "80:8000"
     volumes:
