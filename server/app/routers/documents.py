@@ -130,7 +130,15 @@ async def get_document_file(document_id: int, principal: CurrentPrincipal):
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="document-{document_id}.pdf"',
-            "Content-Security-Policy": "default-src 'none'; sandbox",
+            # frame-ancestors 'self' (not 'none'): the SPA embeds this same
+            # response in its own <iframe> for the PDF preview tab. Without
+            # it, the global SecurityHeadersMiddleware's X-Frame-Options:
+            # DENY default (http_security.py) applies here too, since this
+            # response didn't set its own — blocking even that same-origin
+            # embed. X-Frame-Options: SAMEORIGIN is the fallback for browsers
+            # that don't honor frame-ancestors.
+            "Content-Security-Policy": "default-src 'none'; sandbox; frame-ancestors 'self'",
+            "X-Frame-Options": "SAMEORIGIN",
             "X-Content-Type-Options": "nosniff",
         },
     )
