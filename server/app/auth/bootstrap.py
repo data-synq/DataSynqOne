@@ -9,8 +9,8 @@ im Code hinterlegtes Standardpasswort gibt es bewusst nicht.
 import logging
 
 from .. import db
-from ..config import settings
-from .passwords import hash_password
+from ..config import is_valid_email, reveal_secret, settings
+from .passwords import hash_password, validate_password
 from .permissions import Role
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,13 @@ async def ensure_bootstrap_admin() -> None:
     if await db.count_users() > 0:
         return
 
-    if not settings.admin_email or not settings.admin_password:
+    admin_password = reveal_secret(settings.admin_password)
+    if not settings.admin_email or not admin_password:
+        if settings.environment == "production":
+            raise RuntimeError(
+                "Keine Benutzerkonten vorhanden: ADMIN_EMAIL und ADMIN_PASSWORD sind für den "
+                "einmaligen Produktions-Bootstrap erforderlich."
+            )
         logger.warning(
             "Es existiert kein Benutzerkonto und ADMIN_EMAIL/ADMIN_PASSWORD sind nicht "
             "gesetzt. Ohne diese Werte kann sich niemand anmelden — beide in "
@@ -28,17 +34,23 @@ async def ensure_bootstrap_admin() -> None:
         )
         return
 
+    if not is_valid_email(settings.admin_email):
+        raise RuntimeError("ADMIN_EMAIL ist für den Bootstrap keine gültige E-Mail-Adresse.")
+    try:
+        validate_password(admin_password)
+    except ValueError as exc:
+        raise RuntimeError("ADMIN_PASSWORD erfüllt die Passwortanforderungen nicht.") from exc
+
     user = await db.create_user(
         email=settings.admin_email,
         display_name="Administrator",
-        password_hash=hash_password(settings.admin_password),
+        password_hash=hash_password(admin_password),
         role=Role.ADMIN,
         must_change_password=True,
     )
     logger.warning(
-        "Administrator %s aus ADMIN_EMAIL/ADMIN_PASSWORD angelegt. Das Passwort ist "
+        "Administrator aus ADMIN_EMAIL/ADMIN_PASSWORD angelegt. Das Passwort ist "
         "beim ersten Login zu ändern.",
-        user["email"],
     )
 
     # Chats aus der Zeit vor der Benutzerverwaltung haben keinen Besitzer und wären

@@ -1,7 +1,7 @@
 import json
 
-from ..openai_client import get_client
-
+from ..ai_gateway import chat_completion
+from ..ai_privacy import AIPurpose
 from ..config import settings
 from ..models import ChatMessage
 
@@ -46,7 +46,8 @@ async def generate_suggestions(
     transcript = "\n".join(f"{m.role}: {m.content}" for m in history)
     transcript += f"\nuser: {last_user_message}\nassistant: {last_assistant_message}"
 
-    completion = await get_client().chat.completions.create(
+    completion = await chat_completion(
+        AIPurpose.SUGGESTIONS,
         model=settings.openai_model,
         messages=[
             {"role": "system", "content": _PROMPT},

@@ -1,7 +1,7 @@
 import json
 
-from ..openai_client import get_client
-
+from ..ai_gateway import chat_completion
+from ..ai_privacy import AIPurpose
 from ..config import settings
 
 
@@ -36,7 +36,8 @@ _PROMPT = (
 
 
 async def expand_search_terms(query: str) -> list[str]:
-    completion = await get_client().chat.completions.create(
+    completion = await chat_completion(
+        AIPurpose.QUERY_EXPANSION,
         model=settings.openai_model,
         messages=[
             {"role": "system", "content": _PROMPT},

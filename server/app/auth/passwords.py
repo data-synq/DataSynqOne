@@ -22,16 +22,25 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password_hash: str | None, password: str) -> bool:
+    valid, _ = verify_password_and_rehash(password_hash, password)
+    return valid
+
+
+def verify_password_and_rehash(
+    password_hash: str | None, password: str
+) -> tuple[bool, str | None]:
     if password_hash is None:
         try:
             _hasher.verify(_DUMMY_HASH, password)
         except (VerifyMismatchError, VerificationError, InvalidHashError):
             pass
-        return False
+        return False, None
     try:
-        return _hasher.verify(password_hash, password)
+        valid = _hasher.verify(password_hash, password)
+        replacement = _hasher.hash(password) if _hasher.check_needs_rehash(password_hash) else None
+        return valid, replacement
     except (VerifyMismatchError, VerificationError, InvalidHashError):
-        return False
+        return False, None
 
 
 def validate_password(password: str) -> None:

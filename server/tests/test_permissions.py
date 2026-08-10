@@ -9,6 +9,7 @@ darueber Dokumente aendern.
 import pytest
 
 from app.agent.tools import (
+    MODEL_ALLOWED_WRITE_TOOLS,
     PERMISSION_DENIED,
     RESPONSES_TOOL_DEFINITIONS,
     WRITE_TOOLS,
@@ -20,7 +21,20 @@ from app.auth.permissions import Permission, Principal, Role, permissions_for
 # Namen, an denen ein schreibendes Werkzeug zu erkennen ist. Bewusst unabhaengig
 # von WRITE_TOOLS formuliert — sonst wuerde der Test dieselbe Liste pruefen, die
 # er absichern soll.
-_WRITE_PREFIXES = ("create_", "delete_", "assign_", "set_document_", "rename_", "bulk_")
+_WRITE_PREFIXES = (
+    "create_",
+    "delete_",
+    "assign_",
+    "set_document_",
+    "rename_",
+    "bulk_",
+    "prepare_",
+    "close_",
+    "reopen_",
+    "add_case_",
+    "link_",
+    "unlink_",
+)
 _READ_ONLY_EXCEPTIONS = {"create_chart"}  # zeichnet nur, aendert nichts in Paperless
 
 
@@ -79,8 +93,10 @@ class TestToolFiltering:
             f"angeboten: {sorted(suspicious)}. Fehlen sie in WRITE_TOOLS?"
         )
 
-    def test_editor_sees_the_full_list(self):
-        assert _tool_names(tools_for(can_write=True)) == _tool_names(RESPONSES_TOOL_DEFINITIONS)
+    def test_editor_only_sees_safe_internal_model_writes(self):
+        offered = _tool_names(tools_for(can_write=True))
+        assert MODEL_ALLOWED_WRITE_TOOLS == frozenset()
+        assert offered.isdisjoint(WRITE_TOOLS)
 
     def test_viewer_keeps_the_reading_tools(self):
         offered = _tool_names(tools_for(can_write=False))
@@ -106,3 +122,8 @@ class TestCallToolGuard:
     async def test_unknown_tool_still_reports_unknown(self):
         result = await call_tool("gibt_es_nicht", {}, can_write=False)
         assert "unknown tool" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_editor_cannot_invoke_hidden_destructive_tool(self):
+        result = await call_tool("delete_tag", {"tag_name": "x"}, can_write=True)
+        assert "ausserhalb des Sprachmodells" in result["error"]

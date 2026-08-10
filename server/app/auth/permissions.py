@@ -14,12 +14,26 @@ class Role(StrEnum):
     VIEWER = "viewer"
 
 
+class AuthStage(StrEnum):
+    PASSWORD_CHANGE = "password_change"
+    MFA_SETUP = "mfa_setup"
+    MFA_CHALLENGE = "mfa_challenge"
+    READY = "ready"
+
+
+class ObjectAccessMode(StrEnum):
+    ALL = "all"
+    RESTRICTED = "restricted"
+
+
 class Permission(StrEnum):
     DOCUMENTS_READ = "documents:read"
     AGENT_CHAT = "agent:chat"
     AGENT_WRITE = "agent:write"
     SYNC_RUN = "sync:run"
     USERS_MANAGE = "users:manage"
+    MAIL_MANAGE = "mail:manage"
+    AUDIT_READ = "audit:read"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -34,6 +48,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.DOCUMENTS_READ,
             Permission.AGENT_CHAT,
             Permission.AGENT_WRITE,
+            Permission.MAIL_MANAGE,
         }
     ),
     Role.ADMIN: frozenset(Permission),
@@ -58,18 +73,21 @@ def permissions_for(role: str) -> frozenset[Permission]:
 class Principal:
     """Der angemeldete Benutzer, wie ihn die Anwendung sieht.
 
-    `object_scope` ist die Vorbereitung auf eine Einschränkung nach Objekten
-    (Liegenschaften): None bedeutet 'alle Objekte'. Solange in Paperless keine
-    `obj:`-Tags gepflegt sind, bleibt es überall None — der Filter hat damit aber
-    schon jetzt genau eine Stelle, an der er später greifen kann.
+    `object_access_mode` entscheidet ausdrücklich zwischen globalem und
+    eingeschränktem Zugriff. Ein leeres `object_scope` im eingeschränkten Modus
+    bedeutet keinen Zugriff und kann niemals zu globalem Zugriff degradieren.
     """
 
     user_id: str
     email: str
     display_name: str
     role: Role
+    session_id: str = ""
+    mfa_enabled: bool = False
+    auth_stage: AuthStage = AuthStage.READY
     permissions: frozenset[Permission] = field(default_factory=frozenset)
-    object_scope: frozenset[str] | None = None
+    object_access_mode: ObjectAccessMode = ObjectAccessMode.ALL
+    object_scope: frozenset[str] = field(default_factory=frozenset)
 
     def can(self, permission: Permission) -> bool:
         return permission in self.permissions

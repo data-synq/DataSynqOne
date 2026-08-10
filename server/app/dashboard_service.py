@@ -1,6 +1,8 @@
 import re
 from datetime import UTC, date, datetime, timedelta
 
+from .auth import Principal
+from .auth.object_access import ObjectAuthorizer, parse_object_tag
 from .dashboard_models import ChartData, DashboardOverview, Deadline, DocSummary, TagRef
 from .paperless_client import paperless_client
 from .tag_seed import CATEGORY_TAGS, STATUS_TAGS
@@ -11,7 +13,6 @@ _DUE_RE = re.compile(r"^due:(\d{4}-\d{2}-\d{2})$")
 # daneben als `OBJ-001 Musterhof 1`. Beide meinen dasselbe Objekt, deshalb
 # trennt der Ausdruck Kennung und Klartextnamen: über die Kennung wird
 # gruppiert, der Name ist nur die schönere Beschriftung.
-_OBJ_RE = re.compile(r"^(obj-[\w.]+)(?:\s+(.*))?$", re.IGNORECASE)
 
 _STATUS_PRIORITY = ["overdue", "urgent", "in-progress", "open", "done"]
 
@@ -48,19 +49,6 @@ def parse_due_tag(tag_name: str) -> date | None:
         return date.fromisoformat(match.group(1))
     except ValueError:
         return None
-
-
-def parse_object_tag(tag_name: str) -> tuple[str, str | None] | None:
-    """Kennung und Klartextname eines Objekt-Tags, oder None.
-
-    `OBJ-001`             -> ("OBJ-001", None)
-    `OBJ-001 Musterhof 1` -> ("OBJ-001", "Musterhof 1")
-    """
-    match = _OBJ_RE.match(tag_name)
-    if not match:
-        return None
-    label = (match.group(2) or "").strip()
-    return match.group(1).upper(), label or None
 
 
 def build_object_labels(tags_by_id: dict[int, TagRef]) -> dict[str, str]:
@@ -157,9 +145,11 @@ def resolve_document(
     )
 
 
-async def get_document_detail(document_id: int) -> DocSummary:
+async def get_document_detail(
+    document_id: int, principal: Principal, document: dict | None = None
+) -> DocSummary:
     tags_by_id, correspondents_by_id, document_types_by_id = await _load_lookups()
-    doc = await paperless_client.get_document(document_id)
+    doc = document or await ObjectAuthorizer(principal).require_document(document_id)
     return resolve_document(
         doc,
         tags_by_id,
@@ -169,11 +159,12 @@ async def get_document_detail(document_id: int) -> DocSummary:
     )
 
 
-async def get_overview() -> DashboardOverview:
+async def get_overview(principal: Principal) -> DashboardOverview:
     tags_by_id, correspondents_by_id, document_types_by_id = await _load_lookups()
     all_docs = await paperless_client.list_all_documents(
         ordering="-created", max_results=1000, max_pages=40
     )
+    visible_docs = await ObjectAuthorizer(principal).filter_documents(all_docs.get("results", []))
 
     object_labels = build_object_labels(tags_by_id)
     # Ohne Volltext: die Übersicht schickt bis zu 64 Dokumente, und der
@@ -188,7 +179,7 @@ async def get_overview() -> DashboardOverview:
             object_labels,
             with_content=False,
         )
-        for doc in all_docs.get("results", [])
+        for doc in visible_docs
     ]
 
     today = date.today()
@@ -276,7 +267,7 @@ async def get_overview() -> DashboardOverview:
         "overdue": status_counts.get("overdue", 0),
         "untagged": status_counts.get("untagged", 0),
         "recent_7d": len(recent_docs),
-        "total": all_docs.get("count", len(summaries)),
+        "total": len(summaries),
         # Die Unterzeilen der Kennzahlen. Zahlen, keine Sätze: wie daraus
         # "+6 diese Woche" wird, entscheidet die Oberfläche.
         "open_new_7d": sum(1 for s in recent_docs if s.status == "open"),
