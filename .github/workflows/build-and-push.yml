@@ -50,7 +50,7 @@ jobs:
           (cd server && .venv/bin/uv pip compile --generate-hashes --output-file /tmp/requirements-dev.txt requirements-dev.in)
           diff -u <(sed '1,2d' server/requirements.txt) <(sed '1,2d' /tmp/requirements.txt)
           diff -u <(sed '1,2d' server/requirements-dev.txt) <(sed '1,2d' /tmp/requirements-dev.txt)
-      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: fs
           scan-ref: .
@@ -95,7 +95,7 @@ jobs:
           provenance: false
           sbom: false
           tags: datasynqone-backend:security-scan
-      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: datasynqone-backend:security-scan
           severity: HIGH,CRITICAL
@@ -155,7 +155,7 @@ jobs:
           provenance: false
           sbom: false
           tags: datasynqone-frontend:security-scan
-      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: datasynqone-frontend:security-scan
           severity: HIGH,CRITICAL
