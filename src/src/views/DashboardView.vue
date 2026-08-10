@@ -4,6 +4,7 @@ import { useDashboardStore } from "../stores/dashboard";
 import DashboardHeadline from "../components/dashboard/DashboardHeadline.vue";
 import ObjectFilterBar from "../components/dashboard/ObjectFilterBar.vue";
 import KpiTileRow from "../components/dashboard/KpiTileRow.vue";
+import ChatTeaserBar from "../components/dashboard/ChatTeaserBar.vue";
 import NextUpQueue from "../components/dashboard/NextUpQueue.vue";
 import DeadlinesPanel from "../components/dashboard/DeadlinesPanel.vue";
 import TrendsSection from "../components/dashboard/TrendsSection.vue";
@@ -48,6 +49,8 @@ const emptyBucket = { labels: [], data: [] };
       <ObjectFilterBar :objects="overview.objects" />
 
       <KpiTileRow :kpis="overview.kpis" />
+
+      <ChatTeaserBar />
 
       <div class="dashboard__split">
         <NextUpQueue :queue="store.filteredQueue" :total-open="totalOpen" />

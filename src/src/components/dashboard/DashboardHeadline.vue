@@ -83,12 +83,14 @@ const syncedAt = computed(() => {
       <p class="eyebrow headline__date">{{ today }}</p>
       <h1 class="headline__text">{{ headline }}</h1>
     </div>
-    <p class="mono headline__meta">
-      {{ props.kpis.total.toLocaleString("de-DE") }} Dokumente<template v-if="objectCount">
-        · {{ objectCount }} {{ objectCount === 1 ? "Objekt" : "Objekte" }}</template
-      ><br />
-      <template v-if="syncedAt">zuletzt synchronisiert {{ syncedAt }} Uhr</template>
-    </p>
+    <div class="headline__right">
+      <p class="mono headline__meta">
+        {{ props.kpis.total.toLocaleString("de-DE") }} Dokumente<template v-if="objectCount">
+          · {{ objectCount }} {{ objectCount === 1 ? "Objekt" : "Objekte" }}</template
+        ><br />
+        <template v-if="syncedAt">zuletzt synchronisiert {{ syncedAt }} Uhr</template>
+      </p>
+    </div>
   </section>
 </template>
 
@@ -111,8 +113,15 @@ const syncedAt = computed(() => {
   text-wrap: pretty;
 }
 
+.headline__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
 .headline__meta {
-  margin: 0 0 0.375rem;
+  margin: 0;
   white-space: nowrap;
   text-align: right;
 }
@@ -120,6 +129,10 @@ const syncedAt = computed(() => {
 @media (max-width: 800px) {
   .headline {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .headline__right {
     align-items: flex-start;
   }
 

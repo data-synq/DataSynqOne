@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { api, ApiError, type AppUser } from "../api/client";
+import {
+  api,
+  ApiError,
+  type AppUser,
+  type InvitationResult,
+  type MailSettings,
+  type ObjectAccessInput,
+  type ObjectOption,
+} from "../api/client";
 import { useAuthStore } from "../stores/auth";
 import { formatDate } from "../utils/dates";
 
 const auth = useAuthStore();
 
 const users = ref<AppUser[]>([]);
+const objectOptions = ref<ObjectOption[]>([]);
+const scopeDrafts = ref<Record<string, ObjectAccessInput>>({});
 const loading = ref(true);
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
@@ -17,13 +27,30 @@ const ROLES = [
   { value: "viewer", label: "Betrachter", hint: "Nur lesen, der Assistent ändert nichts" },
 ];
 
-const draft = ref({ email: "", display_name: "", role: "editor", password: "" });
+const draft = ref<{
+  email: string;
+  display_name: string;
+  role: string;
+  object_access_mode: "" | "all" | "restricted";
+  object_codes: string[];
+}>({ email: "", display_name: "", role: "editor", object_access_mode: "", object_codes: [] });
 const creating = ref(false);
+
+/** Nur gesetzt, wenn kein Mailversand eingerichtet ist — dann ist er der einzige Weg. */
+const manualLink = ref<string | null>(null);
+const mail = ref<MailSettings | null>(null);
+const testing = ref(false);
 
 async function load() {
   loading.value = true;
   try {
     users.value = await api.listUsers();
+    scopeDrafts.value = Object.fromEntries(
+      users.value.map((user) => [
+        user.id,
+        { mode: user.object_access_mode, object_codes: [...user.object_codes] },
+      ]),
+    );
     error.value = null;
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : "Die Benutzerliste konnte nicht geladen werden.";
@@ -32,56 +59,131 @@ async function load() {
   }
 }
 
-/** Jede Änderung meldet ihr Ergebnis an derselben Stelle. */
-async function run(action: () => Promise<unknown>, success: string) {
+/** Jede Änderung meldet ihr Ergebnis an derselben Stelle.
+ *  Die Aktion liefert die Meldung selbst, weil manche sie erst aus der Antwort kennen. */
+async function run(action: () => Promise<string>) {
   error.value = null;
   notice.value = null;
+  manualLink.value = null;
   try {
-    await action();
-    notice.value = success;
+    notice.value = await action();
     await load();
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : "Die Änderung ist fehlgeschlagen.";
   }
 }
 
+/** Meldung zu einer Einladung. Der Link wird nur gezeigt, wenn keine Mail rausging. */
+function reportInvitation(result: InvitationResult, name: string) {
+  manualLink.value = result.invitation_link;
+  return result.mail_sent
+    ? `Einladung an ${result.user.email} verschickt.`
+    : `${name}: Es ist kein Mailversand eingerichtet — gib diesen Link persönlich weiter.`;
+}
+
 async function create() {
+  if (!draft.value.object_access_mode) {
+    error.value = "Wähle den Objektzugriff ausdrücklich aus.";
+    return;
+  }
+  if (draft.value.object_access_mode === "restricted" && !draft.value.object_codes.length) {
+    error.value = "Wähle mindestens ein Objekt aus.";
+    return;
+  }
   creating.value = true;
-  await run(
-    () => api.createUser({ ...draft.value }),
-    `${draft.value.display_name} wurde angelegt. Das Startpasswort ist beim ersten Login zu ändern.`,
+  const name = draft.value.display_name;
+  await run(async () =>
+    reportInvitation(
+      await api.createUser({
+        email: draft.value.email,
+        display_name: draft.value.display_name,
+        role: draft.value.role,
+        object_access: {
+          mode: draft.value.object_access_mode as "all" | "restricted",
+          object_codes:
+            draft.value.object_access_mode === "all" ? [] : draft.value.object_codes,
+        },
+      }),
+      name,
+    ),
   );
   creating.value = false;
-  if (!error.value) draft.value = { email: "", display_name: "", role: "editor", password: "" };
+  if (!error.value) {
+    draft.value = {
+      email: "",
+      display_name: "",
+      role: "editor",
+      object_access_mode: "",
+      object_codes: [],
+    };
+  }
+}
+
+function saveScope(user: AppUser) {
+  const access = scopeDrafts.value[user.id];
+  if (!access || (access.mode === "restricted" && !access.object_codes.length)) {
+    error.value = "Eingeschränkter Zugriff benötigt mindestens ein Objekt.";
+    return;
+  }
+  if (
+    access.mode === "all" &&
+    user.object_access_mode !== "all" &&
+    !window.confirm(`Den Zugriff für ${user.display_name} wirklich auf alle Objekte erweitern?`)
+  ) {
+    return;
+  }
+  run(async () => {
+    await api.updateObjectScope(user.id, {
+      mode: access.mode,
+      object_codes: access.mode === "all" ? [] : access.object_codes,
+    });
+    return `${user.display_name}: Objektzugriff gespeichert. Sitzungen und alte Chats wurden beendet.`;
+  });
+}
+
+function resendInvitation(user: AppUser) {
+  run(async () =>
+    reportInvitation(await api.resendInvitation(user.id), user.display_name),
+  );
+}
+
+async function copyLink() {
+  if (!manualLink.value) return;
+  try {
+    await navigator.clipboard.writeText(manualLink.value);
+    notice.value = "Link kopiert.";
+  } catch {
+    // clipboard braucht einen sicheren Kontext; über http bleibt der Link
+    // markierbar im Feld stehen.
+    error.value = "Kopieren nicht möglich — bitte den Link von Hand markieren.";
+  }
+}
+
+async function sendTestMail() {
+  testing.value = true;
+  await run(async () => {
+    const result = await api.sendTestMail();
+    return `${result.detail} (${result.recipient})`;
+  });
+  testing.value = false;
 }
 
 function changeRole(user: AppUser, role: string) {
   if (role === user.role) return;
-  run(
-    () => api.updateUser(user.id, { role }),
-    `${user.display_name} ist jetzt ${ROLES.find((r) => r.value === role)?.label}. Laufende Sitzungen wurden beendet.`,
-  );
+  run(async () => {
+    await api.updateUser(user.id, { role });
+    const label = ROLES.find((r) => r.value === role)?.label;
+    return `${user.display_name} ist jetzt ${label}. Laufende Sitzungen wurden beendet.`;
+  });
 }
 
 function toggleActive(user: AppUser) {
-  run(
-    () => api.updateUser(user.id, { is_active: !user.is_active }),
-    user.is_active
+  run(async () => {
+    await api.updateUser(user.id, { is_active: !user.is_active });
+    return user.is_active
       ? `${user.display_name} wurde deaktiviert und abgemeldet.`
-      : `${user.display_name} kann sich wieder anmelden.`,
-  );
-}
-
-function resetPassword(user: AppUser) {
-  const password = window.prompt(
-    `Neues Startpasswort für ${user.display_name} (mindestens 12 Zeichen).\n` +
-      `Es muss beim nächsten Login geändert werden.`,
-  );
-  if (!password) return;
-  run(
-    () => api.resetUserPassword(user.id, password),
-    `Passwort für ${user.display_name} gesetzt. Alle Sitzungen wurden beendet.`,
-  );
+      : `${user.display_name} kann sich wieder anmelden.`;
+  });
 }
 
 function remove(user: AppUser) {
@@ -92,21 +194,52 @@ function remove(user: AppUser) {
     )
   )
     return;
-  run(() => api.deleteUser(user.id), `${user.display_name} wurde gelöscht.`);
+  run(async () => {
+    await api.deleteUser(user.id);
+    return `${user.display_name} wurde gelöscht.`;
+  });
 }
 
-onMounted(load);
+onMounted(async () => {
+  try {
+    objectOptions.value = await api.listObjectOptions();
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : "Die Objektliste konnte nicht geladen werden.";
+  }
+  await load();
+  // Nur zur Anzeige: ohne sie erklärt sich ein ausbleibender Einladungslink nicht.
+  try {
+    mail.value = await api.mailSettings();
+  } catch {
+    /* der Zustand der Liste hängt nicht daran */
+  }
+});
 </script>
 
 <template>
   <div class="container users">
     <div class="section-head">
       <h2>Benutzer</h2>
-      <RouterLink to="/" class="link-action">Zurück zum Dashboard</RouterLink>
+      <div class="head-actions">
+        <button type="button" class="link-action" :disabled="testing" @click="sendTestMail">
+          {{ testing ? "Testmail läuft …" : "Testmail an mich" }}
+        </button>
+        <RouterLink to="/" class="link-action">Zurück zum Dashboard</RouterLink>
+      </div>
     </div>
 
     <p v-if="notice" class="notice notice--ok" role="status">{{ notice }}</p>
+    <p v-if="manualLink" class="notice notice--link">
+      <code class="manual-link">{{ manualLink }}</code>
+      <button type="button" class="link-action" @click="copyLink">Kopieren</button>
+    </p>
     <p v-if="error" class="notice notice--error" role="alert">{{ error }}</p>
+
+    <p v-if="mail && !mail.enabled" class="notice notice--warn">
+      Es ist kein Mailversand eingerichtet (<code>SMTP_HOST</code>,
+      <code>SMTP_FROM_EMAIL</code>). Einladungen werden nicht verschickt — der Link
+      erscheint stattdessen hier zum Weitergeben.
+    </p>
 
     <p v-if="loading" class="mono users__state">Wird geladen …</p>
 
@@ -116,6 +249,7 @@ onMounted(load);
           <th>Name</th>
           <th>E-Mail</th>
           <th>Rolle</th>
+          <th>Objektzugriff</th>
           <th>Status</th>
           <th>Letzter Login</th>
           <th><span class="visually-hidden">Aktionen</span></th>
@@ -141,13 +275,44 @@ onMounted(load);
             </select>
           </td>
           <td>
+            <details class="scope-editor">
+              <summary class="link-action">
+                {{ user.object_access_mode === "all" ? "Alle Objekte" : `${user.object_codes.length} Objekte` }}
+              </summary>
+              <fieldset v-if="scopeDrafts[user.id]" :disabled="user.id === auth.user?.id">
+                <legend class="visually-hidden">Objektzugriff für {{ user.display_name }}</legend>
+                <label>
+                  <input v-model="scopeDrafts[user.id].mode" type="radio" value="all" />
+                  Alle Objekte
+                </label>
+                <label>
+                  <input v-model="scopeDrafts[user.id].mode" type="radio" value="restricted" />
+                  Nur ausgewählte
+                </label>
+                <div v-if="scopeDrafts[user.id].mode === 'restricted'" class="scope-options">
+                  <label v-for="object in objectOptions" :key="object.code">
+                    <input
+                      v-model="scopeDrafts[user.id].object_codes"
+                      type="checkbox"
+                      :value="object.code"
+                    />
+                    <span><code>{{ object.code }}</code> {{ object.label }}</span>
+                  </label>
+                </div>
+                <button type="button" class="button--secondary" @click="saveScope(user)">
+                  Speichern
+                </button>
+              </fieldset>
+            </details>
+          </td>
+          <td>
             <span class="mono">{{ user.is_active ? "aktiv" : "deaktiviert" }}</span>
-            <span v-if="user.must_change_password" class="badge mono">Passwort offen</span>
+            <span v-if="!user.last_login_at" class="badge mono">eingeladen</span>
           </td>
           <td class="mono">{{ user.last_login_at ? formatDate(user.last_login_at) : "—" }}</td>
           <td class="actions">
-            <button type="button" class="link-action" @click="resetPassword(user)">
-              Passwort
+            <button type="button" class="link-action" @click="resendInvitation(user)">
+              {{ user.last_login_at ? "Passwort zurücksetzen" : "Einladung erneut" }}
             </button>
             <button
               type="button"
@@ -179,6 +344,23 @@ onMounted(load);
         <label class="field__label" for="new-name">Name</label>
         <input id="new-name" v-model="draft.display_name" type="text" required />
       </div>
+      <fieldset class="field scope-create">
+        <legend class="field__label">Objektzugriff</legend>
+        <label>
+          <input v-model="draft.object_access_mode" type="radio" value="all" required />
+          Alle Objekte
+        </label>
+        <label>
+          <input v-model="draft.object_access_mode" type="radio" value="restricted" required />
+          Nur ausgewählte Objekte
+        </label>
+        <div v-if="draft.object_access_mode === 'restricted'" class="scope-options">
+          <label v-for="object in objectOptions" :key="object.code">
+            <input v-model="draft.object_codes" type="checkbox" :value="object.code" />
+            <span><code>{{ object.code }}</code> {{ object.label }}</span>
+          </label>
+        </div>
+      </fieldset>
       <div class="field">
         <label class="field__label" for="new-email">E-Mail</label>
         <input id="new-email" v-model="draft.email" type="email" required />
@@ -192,22 +374,11 @@ onMounted(load);
         </select>
         <p class="field__hint mono">{{ ROLES.find((r) => r.value === draft.role)?.hint }}</p>
       </div>
-      <div class="field">
-        <label class="field__label" for="new-password">Startpasswort</label>
-        <input
-          id="new-password"
-          v-model="draft.password"
-          type="text"
-          minlength="12"
-          required
-          autocomplete="off"
-        />
-        <p class="field__hint mono">
-          Mindestens 12 Zeichen. Wird beim ersten Login geändert.
-        </p>
-      </div>
+      <p class="field__hint mono create__hint">
+        Kein Startpasswort: die Person bekommt einen Einladungslink und vergibt es selbst.
+      </p>
       <button type="submit" class="button--primary" :disabled="creating">
-        {{ creating ? "Wird angelegt …" : "Anlegen" }}
+        {{ creating ? "Wird angelegt …" : "Anlegen und einladen" }}
       </button>
     </form>
   </div>
@@ -289,6 +460,46 @@ onMounted(load);
   margin-top: var(--space-3);
 }
 
+.scope-editor {
+  position: relative;
+}
+
+.scope-editor fieldset {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 0.5rem;
+  width: min(24rem, 80vw);
+  margin-top: 0.4rem;
+  padding: var(--space-2);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-white);
+}
+
+.scope-options {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 14rem;
+  padding: var(--space-2);
+  overflow-y: auto;
+  border: 1px solid var(--color-line-soft);
+  background: var(--color-surface-muted);
+}
+
+.scope-options label,
+.scope-create > label {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.scope-create {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  border: 0;
+}
+
 .field {
   margin-bottom: var(--space-3);
 }
@@ -318,6 +529,35 @@ onMounted(load);
 .notice--error {
   border-left-color: var(--color-error);
   color: var(--color-error);
+}
+
+.notice--warn {
+  border-left-color: var(--color-warning);
+}
+
+.notice--link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-left-color: var(--color-line-strong);
+}
+
+/* Der Link muss vollständig lesbar sein — er wird von Hand weitergegeben. */
+.manual-link {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.head-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.create__hint {
+  margin-bottom: var(--space-3);
 }
 
 .visually-hidden {

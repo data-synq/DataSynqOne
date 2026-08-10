@@ -14,9 +14,11 @@ export const useAuthStore = defineStore("auth", {
     resolved: false,
   }),
   getters: {
-    isAuthenticated: (state) => state.user !== null,
+    hasSession: (state) => state.user !== null,
+    isAuthenticated: (state) => state.user?.auth_stage === "ready",
+    authStage: (state) => state.user?.auth_stage ?? null,
     /** Der Passwortwechsel steht vor allem anderen, wenn er erzwungen ist. */
-    mustChangePassword: (state) => state.user?.must_change_password ?? false,
+    mustChangePassword: (state) => state.user?.auth_stage === "password_change",
   },
   actions: {
     can(permission: PermissionName): boolean {
@@ -45,6 +47,16 @@ export const useAuthStore = defineStore("auth", {
       this.user = await api.changePassword(currentPassword, newPassword);
     },
 
+    async confirmMfa(code: string) {
+      const result = await api.confirmMfa(code);
+      this.user = result.user;
+      return result.recovery_codes;
+    },
+
+    async verifyMfa(code: string) {
+      this.user = await api.verifyMfa(code);
+    },
+
     async logout() {
       try {
         await api.logout();
@@ -66,6 +78,6 @@ export const useAuthStore = defineStore("auth", {
 export function registerAuthInterceptor() {
   setUnauthorizedHandler(() => {
     const auth = useAuthStore();
-    if (auth.isAuthenticated) auth.clear();
+    if (auth.hasSession) auth.clear();
   });
 }
