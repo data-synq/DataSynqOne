@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install locked dependencies
+        run: |
+          python3 -m venv server/.venv
+          server/.venv/bin/python -m pip install --require-hashes -r server/requirements-dev.txt
+          npm --prefix src ci
+      - name: Full test gate
+        run: |
+          make check
+          server/.venv/bin/python -m pip check
+          server/.venv/bin/pip-audit --requirement server/requirements.txt --disable-pip
+          npm --prefix src audit --omit=dev --audit-level=high
+      - name: Verify generated locks are current
+        shell: bash
+        run: |
+          cp server/requirements.txt /tmp/requirements.txt
+          cp server/requirements-dev.txt /tmp/requirements-dev.txt
+          (cd server && .venv/bin/uv pip compile --generate-hashes --output-file /tmp/requirements.txt requirements.in)
+          (cd server && .venv/bin/uv pip compile --generate-hashes --output-file /tmp/requirements-dev.txt requirements-dev.in)
+          diff -u <(sed '1,2d' server/requirements.txt) <(sed '1,2d' /tmp/requirements.txt)
+          diff -u <(sed '1,2d' server/requirements-dev.txt) <(sed '1,2d' /tmp/requirements-dev.txt)
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Build production containers
+        run: |
+          docker build --network=host server
+          docker build --network=host --build-arg VITE_BACKEND_URL=/api src
