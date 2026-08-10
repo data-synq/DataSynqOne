@@ -137,7 +137,15 @@ async def get_document_file(document_id: int, principal: CurrentPrincipal):
             # response didn't set its own — blocking even that same-origin
             # embed. X-Frame-Options: SAMEORIGIN is the fallback for browsers
             # that don't honor frame-ancestors.
-            "Content-Security-Policy": "default-src 'none'; sandbox; frame-ancestors 'self'",
+            #
+            # No bare `sandbox` token here (unlike an earlier version):
+            # combined with the frontend's own iframe sandbox attribute it
+            # blocked the browser's native PDF viewer from running its own
+            # script (rendering, the download button) — same-origin
+            # embedding already prevents the content this was meant to
+            # guard against, and default-src 'none' still blocks the PDF
+            # from fetching any external resource.
+            "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
             "X-Frame-Options": "SAMEORIGIN",
             "X-Content-Type-Options": "nosniff",
         },

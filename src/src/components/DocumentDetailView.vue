@@ -137,7 +137,7 @@ function ask() {
           :src="fileUrl"
           class="detail__frame"
           title="Dokumentvorschau"
-          sandbox=""
+          sandbox="allow-scripts allow-same-origin allow-downloads"
           referrerpolicy="no-referrer"
         />
         <div v-else class="detail__text">{{ document.content }}</div>

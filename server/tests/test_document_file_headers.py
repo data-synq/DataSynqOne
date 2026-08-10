@@ -19,4 +19,9 @@ async def test_document_file_allows_same_origin_framing():
         response = await documents.get_document_file(document_id=1, principal=object())
 
     assert response.headers["x-frame-options"] == "SAMEORIGIN"
-    assert "frame-ancestors 'self'" in response.headers["content-security-policy"]
+    csp = response.headers["content-security-policy"]
+    assert "frame-ancestors 'self'" in csp
+    # A bare `sandbox` token here (no allow-* tokens) previously blocked the
+    # browser's own native PDF viewer from running its own script, breaking
+    # rendering and its download button even for same-origin embedding.
+    assert "sandbox" not in csp

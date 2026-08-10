@@ -148,7 +148,7 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
               class="picker__preview-frame"
               :src="fileUrl(previewDoc.id)"
               title="Dokumentvorschau"
-              sandbox=""
+              sandbox="allow-scripts allow-same-origin allow-downloads"
               referrerpolicy="no-referrer"
             />
             <span class="picker__preview-title">{{ previewDoc.title }}</span>
