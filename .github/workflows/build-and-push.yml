@@ -3,167 +3,181 @@ name: build-and-push
 on:
   push:
     branches: [main]
-    # A tag is what actually ships. Pushing to main only builds images, so a
-    # broken build surfaces on the merge that caused it; nothing reaches the
-    # server until someone cuts a release here.
     tags: ["v*"]
   workflow_dispatch:
 
-# Superseded main builds are pointless - only the newest image matters.
-# Tag builds are never cancelled: each one is a release someone deliberately
-# cut, and bump-infra below only runs if both of its images really exist.
 concurrency:
   group: build-and-push-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
 
 jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate release ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+          fi
+      - name: Install locked dependencies
+        run: |
+          python3 -m venv server/.venv
+          server/.venv/bin/python -m pip install --require-hashes -r server/requirements-dev.txt
+          npm --prefix src ci
+      - name: Test and audit
+        run: |
+          make check
+          server/.venv/bin/python -m pip check
+          server/.venv/bin/pip-audit --requirement server/requirements.txt --disable-pip
+          npm --prefix src audit --omit=dev --audit-level=high
+      - name: Verify generated locks are current
+        shell: bash
+        run: |
+          cp server/requirements.txt /tmp/requirements.txt
+          cp server/requirements-dev.txt /tmp/requirements-dev.txt
+          (cd server && .venv/bin/uv pip compile --generate-hashes --output-file /tmp/requirements.txt requirements.in)
+          (cd server && .venv/bin/uv pip compile --generate-hashes --output-file /tmp/requirements-dev.txt requirements-dev.in)
+          diff -u <(sed '1,2d' server/requirements.txt) <(sed '1,2d' /tmp/requirements.txt)
+          diff -u <(sed '1,2d' server/requirements-dev.txt) <(sed '1,2d' /tmp/requirements-dev.txt)
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
   backend:
-    runs-on: ubuntu-latest
+    needs: quality
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        with:
+          version: v0.28.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         id: meta
         with:
           images: ghcr.io/data-synq/datasynqone-backend
-          # `latest` deliberately means "tip of main" and is pinned by nobody -
-          # DataSynqInfra pins the semver tag, see its README on why a floating
-          # tag there would land a new image on some unrelated future redeploy.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short,prefix=sha-
+            type=sha,format=long,prefix=sha-
             type=semver,pattern={{version}}
-
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./server
+          load: true
+          provenance: false
+          sbom: false
+          tags: datasynqone-backend:security-scan
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: datasynqone-backend:security-scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         id: build
         with:
           context: ./server
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661
+        with:
+          subject-name: ghcr.io/data-synq/datasynqone-backend
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   frontend:
-    runs-on: ubuntu-latest
+    needs: quality
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        with:
+          version: v0.28.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         id: meta
         with:
           images: ghcr.io/data-synq/datasynqone-frontend
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short,prefix=sha-
+            type=sha,format=long,prefix=sha-
             type=semver,pattern={{version}}
-
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: ./src
+          build-args: VITE_BACKEND_URL=/api
+          load: true
+          provenance: false
+          sbom: false
+          tags: datasynqone-frontend:security-scan
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: datasynqone-frontend:security-scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         id: build
         with:
           context: ./src
+          build-args: VITE_BACKEND_URL=/api
+          platforms: linux/amd64
           push: true
-          # Baked into the JS bundle at build time - the frontend has no
-          # runtime config, so this is the one place the backend URL is set.
-          #
-          # Relative, not https://api.data-synq.com: one.data-synq.com is
-          # public behind HTTP basic auth, and that only works if the API
-          # shares the frontend's origin. Cross-origin, the CORS preflight
-          # carries no Authorization header and gets 401'd before the real
-          # request happens, and the browser never prompts for a foreign
-          # origin's credentials either. Caddy routes /api/* on that host to
-          # one-backend and strips the prefix - see DataSynqInfra's Caddyfile.
-          build-args: |
-            VITE_BACKEND_URL=/api
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-  # Points DataSynqInfra's two image pins at this release, which is what
-  # actually triggers a deploy: its timer polls that repo's main every 3
-  # minutes and applies what it finds. Everything downstream from here -
-  # data snapshot, healthcheck gate, automatic rollback to the previous pin
-  # on failure - is that pipeline's job, not this workflow's.
-  #
-  # `needs` both builds on purpose: the two images are built from one commit
-  # and always move together, and a half-bumped compose file would deploy a
-  # frontend against a backend it was never built against.
-  bump-infra:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [backend, frontend]
-    runs-on: ubuntu-latest
-    steps:
-      # INFRA_BUMP_TOKEN is a fine-grained PAT scoped to DataSynqInfra with
-      # Contents: write, and nothing else. Note what this means: anyone who
-      # can push a v* tag here can commit to that repo, and it reaches the
-      # server within three minutes.
-      - uses: actions/checkout@v4
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661
         with:
-          repository: data-synq/DataSynqInfra
-          ref: main
-          token: ${{ secrets.INFRA_BUMP_TOKEN }}
-          # Full history: the rebase below needs a real one to rebase onto,
-          # and checkout's default depth of 1 turns that into a shallow-repo
-          # error at exactly the moment it matters (main moved mid-build).
-          fetch-depth: 0
+          subject-name: ghcr.io/data-synq/datasynqone-frontend
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
-      - name: Point both image pins at this release
-        env:
-          BACKEND_DIGEST: ${{ needs.backend.outputs.digest }}
-          FRONTEND_DIGEST: ${{ needs.frontend.outputs.digest }}
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-
-          sed -i -E "s#(ghcr\.io/data-synq/datasynqone-(backend|frontend):)[^[:space:]]+#\1${version}#" \
-            docker/docker-compose.yml
-
-          # A sed that matches nothing looks exactly like "already up to
-          # date" one step further down, so check the result instead of
-          # trusting the substitution - e.g. a pin rewritten by hand to a
-          # digest (@sha256:...) has no tag for this pattern to replace.
-          for image in backend frontend; do
-            grep -q "image: ghcr.io/data-synq/datasynqone-${image}:${version}$" docker/docker-compose.yml \
-              || { echo "::error::could not rewrite the ${image} pin - did the image: line in docker/docker-compose.yml change shape?"; exit 1; }
-          done
-
-          if git diff --quiet -- docker/docker-compose.yml; then
-            echo "pins already at ${version}, nothing to commit"
-            exit 0
-          fi
-
-          {
-            printf 'Release DataSynq One %s\n\n' "$version"
-            printf 'Automated pin bump from DataSynqOne'"'"'s release workflow, cut as\n'
-            printf 'tag %s (%s). The deploy timer picks this up\n' "$GITHUB_REF_NAME" "$GITHUB_SHA"
-            printf 'within three minutes.\n\n'
-            printf 'Digests this version resolves to, so a moved tag would show up\n'
-            printf 'as a mismatch later:\n'
-            printf '  backend  %s\n' "$BACKEND_DIGEST"
-            printf '  frontend %s\n' "$FRONTEND_DIGEST"
-          } > "${RUNNER_TEMP}/bump-msg"
-
-          git config user.name "datasynqone-release"
-          git config user.email "release@data-synq.com"
-          git commit -q -a -F "${RUNNER_TEMP}/bump-msg"
-
-          # main may have moved while the images were building.
-          git pull --rebase --quiet origin main
-          git push origin HEAD:main
+# Production deployment intentionally is not automated here. Copy the two immutable
+# job digests into a reviewed DataSynqInfra pull request after verifying the OCI
+# provenance/SBOM. No cross-repository write credential is available to this workflow.

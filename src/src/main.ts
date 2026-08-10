@@ -15,8 +15,12 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 import App from "./App.vue";
 import { router } from "./router";
+import { registerAuthInterceptor } from "./stores/auth";
 
 const app = createApp(App);
 app.use(createPinia());
+// Vor app.use(router), weil der erste Navigations-Guard sofort läuft und ein 401
+// aus /auth/me schon im Store landen können muss.
+registerAuthInterceptor();
 app.use(router);
 app.mount("#app");

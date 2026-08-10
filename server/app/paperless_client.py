@@ -1,18 +1,47 @@
+import asyncio
 import httpx
+from urllib.parse import urlsplit
 
-from .config import settings
+from .config import reveal_secret, settings
+
+
+_DOWNLOAD_LIMIT = asyncio.Semaphore(4)
 
 
 class PaperlessClient:
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(
             base_url=settings.paperless_base_url,
-            headers={"Authorization": f"Token {settings.paperless_api_token}"},
+            headers={"Authorization": f"Token {reveal_secret(settings.paperless_api_token)}"},
             timeout=30.0,
         )
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    async def ready(self) -> bool:
+        try:
+            response = await asyncio.wait_for(
+                self._client.get("/api/documents/", params={"page_size": 1}), timeout=2
+            )
+            response.raise_for_status()
+            return True
+        except (asyncio.TimeoutError, httpx.HTTPError):
+            return False
+
+    @staticmethod
+    def _safe_next_url(next_url: str) -> str:
+        candidate = urlsplit(next_url)
+        if not candidate.scheme and not candidate.netloc:
+            return next_url
+        base = urlsplit(settings.paperless_base_url)
+        if (candidate.scheme, candidate.hostname, candidate.port) != (
+            base.scheme,
+            base.hostname,
+            base.port,
+        ):
+            raise httpx.InvalidURL("Paperless pagination left the configured origin")
+        return next_url
 
     async def list_documents(
         self,
@@ -67,7 +96,7 @@ class PaperlessClient:
         truncated = False
 
         while next_url and pages_fetched < max_pages and len(results) < max_results:
-            resp = await self._client.get(next_url)
+            resp = await self._client.get(self._safe_next_url(next_url))
             resp.raise_for_status()
             page = resp.json()
             results.extend(page.get("results", []))
@@ -98,15 +127,59 @@ class PaperlessClient:
         return resp.json()
 
     async def list_tags(self) -> dict:
+        # Eine einzelne Seite reicht nicht mehr: sobald mehr als 100 Tags existieren
+        # (z. B. viele 'due:'-Termine), fehlten ohne Paginierung genau die Tags nach
+        # Seite 1 in jeder Nachschlagetabelle — je nach Sortierung traf das auch
+        # 'open'/'urgent'/'overdue', und Dokumente mit diesen Tags galten dann als
+        # ungetaggt, obwohl sie es nicht waren.
         resp = await self._client.get("/api/tags/", params={"page_size": 100})
         resp.raise_for_status()
-        return resp.json()
+        page = resp.json()
+        results = list(page.get("results", []))
+        next_url = page.get("next")
+        seen_urls: set[str] = set()
+        pages = 1
+        while next_url and pages < 100 and len(results) < 10000:
+            safe_url = self._safe_next_url(next_url)
+            if safe_url in seen_urls:
+                raise httpx.HTTPError("Paperless pagination cycle detected")
+            seen_urls.add(safe_url)
+            resp = await self._client.get(safe_url)
+            resp.raise_for_status()
+            page = resp.json()
+            results.extend(page.get("results", []))
+            next_url = page.get("next")
+            pages += 1
+        if next_url:
+            raise httpx.HTTPError("Paperless tag pagination exceeds the configured limit")
+        return {"count": len(results), "results": results}
 
     async def get_document_preview(self, document_id: int) -> tuple[bytes, str]:
-        resp = await self._client.get(f"/api/documents/{document_id}/preview/")
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "application/pdf")
-        return resp.content, content_type
+        return await self._download_limited(
+            f"/api/documents/{document_id}/preview/", 25 * 1024 * 1024, "application/pdf"
+        )
+
+    async def get_document_thumbnail(self, document_id: int) -> tuple[bytes, str]:
+        return await self._download_limited(
+            f"/api/documents/{document_id}/thumb/", 5 * 1024 * 1024, "image/webp"
+        )
+
+    async def _download_limited(self, path: str, limit: int, default_type: str) -> tuple[bytes, str]:
+        async with _DOWNLOAD_LIMIT:
+            chunks: list[bytes] = []
+            size = 0
+            async with self._client.stream("GET", path) as resp:
+                resp.raise_for_status()
+                declared = resp.headers.get("content-length")
+                if declared and int(declared) > limit:
+                    raise httpx.HTTPError("Paperless response exceeds the configured size limit")
+                async for chunk in resp.aiter_bytes():
+                    size += len(chunk)
+                    if size > limit:
+                        raise httpx.HTTPError("Paperless response exceeds the configured size limit")
+                    chunks.append(chunk)
+                content_type = resp.headers.get("content-type", default_type).split(";", 1)[0].lower()
+            return b"".join(chunks), content_type
 
     async def create_tag(self, name: str, color: str | None = None) -> dict:
         payload: dict = {"name": name, "matching_algorithm": 0}
@@ -155,6 +228,26 @@ class PaperlessClient:
         )
         resp.raise_for_status()
         return resp.json() if resp.content else {}
+
+    async def list_mail_accounts(self) -> dict:
+        resp = await self._client.get("/api/mail_accounts/", params={"page_size": 100})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def create_mail_account(self, payload: dict) -> dict:
+        resp = await self._client.post("/api/mail_accounts/", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def list_mail_rules(self) -> dict:
+        resp = await self._client.get("/api/mail_rules/", params={"page_size": 100})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def create_mail_rule(self, payload: dict) -> dict:
+        resp = await self._client.post("/api/mail_rules/", json=payload)
+        resp.raise_for_status()
+        return resp.json()
 
 
 paperless_client = PaperlessClient()

@@ -1,0 +1,401 @@
+name: datasynqone-production
+
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  redis:
+    <<: *hardened
+    image: docker.io/library/redis@sha256:39353c6a2f310da333374e1290c91805d15a85def073b5090f58e4ac646d284c
+    user: "999:999"
+    volumes:
+      - type: bind
+        source: ./data/redis
+        target: /data
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=32m,uid=999,gid=999,mode=1770
+    networks:
+      - paperless_internal
+    cpus: 0.50
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  postgres:
+    <<: *hardened
+    image: docker.io/library/postgres@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+    user: "999:999"
+    group_add:
+      - ${DATASYNQ_SECRETS_GID:?Set DATASYNQ_SECRETS_GID to the host secrets group}
+    env_file:
+      - ${POSTGRES_ENV_FILE:-env/postgres.prod.env.example}
+    secrets:
+      - source: paperless_db_password
+        target: paperless_db_password
+    volumes:
+      - type: bind
+        source: ./data/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /var/run/postgresql:rw,nosuid,nodev,noexec,size=16m,uid=999,gid=999,mode=3775
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=999,gid=999,mode=1770
+    networks:
+      - paperless_internal
+    cpus: 1.00
+    mem_limit: 1g
+    pids_limit: 256
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc 'SELECT 1')" = "1"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  vectordb:
+    <<: *hardened
+    image: docker.io/pgvector/pgvector@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
+    user: "999:999"
+    group_add:
+      - ${DATASYNQ_SECRETS_GID:?Set DATASYNQ_SECRETS_GID to the host secrets group}
+    env_file:
+      - ${VECTORDB_ENV_FILE:-env/vectordb.prod.env.example}
+    secrets:
+      - source: vectordb_password
+        target: vectordb_password
+    volumes:
+      - type: bind
+        source: ./data/vectordb
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /var/run/postgresql:rw,nosuid,nodev,noexec,size=16m,uid=999,gid=999,mode=3775
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=999,gid=999,mode=1770
+    networks:
+      - vector_internal
+    cpus: 2.00
+    mem_limit: 2g
+    pids_limit: 256
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(psql -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -Atqc 'SELECT 1')" = "1"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  gotenberg:
+    <<: *hardened
+    image: docker.io/gotenberg/gotenberg@sha256:a16a14e1f18a71405624bc028e90d4ef50ea774c352b303639c10bf7b141f760
+    user: "1001:1001"
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=true
+      - --chromium-allow-list=file:///tmp/.*
+      - --api-disable-download-from=true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=512m,uid=1001,gid=1001,mode=1770
+      - /home/gotenberg:rw,nosuid,nodev,noexec,size=256m,uid=1001,gid=1001,mode=0700
+    shm_size: 512m
+    networks:
+      - paperless_internal
+    cpus: 2.00
+    mem_limit: 2g
+    pids_limit: 768
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "2", "http://127.0.0.1:3000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  tika:
+    <<: *hardened
+    image: docker.io/apache/tika@sha256:90b7fa1dc018434075fce9e1d9b88b1e3d0ea6979d0cf86e116c79a8073ae973
+    user: "35002:35002"
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx1024m -Djava.io.tmpdir=/tmp
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m,uid=35002,gid=35002,mode=1770
+    networks:
+      - paperless_internal
+    cpus: 1.50
+    mem_limit: 1536m
+    pids_limit: 384
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9998;
+          printf 'GET /tika HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3;
+          IFS= read -r status <&3;
+          [[ "$$status" == *" 200 "* ]]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  paperless:
+    <<: *hardened
+    image: ghcr.io/paperless-ngx/paperless-ngx@sha256:65a4cabf0169ea7fbd90ab7bb28ba3f8b5909613635acda1a03ad606f34b456b
+    user: "${PAPERLESS_UID:-1000}:${PAPERLESS_GID:-1000}"
+    group_add:
+      - ${DATASYNQ_SECRETS_GID:?Set DATASYNQ_SECRETS_GID to the host secrets group}
+    entrypoint: ["/bin/sh", "/usr/local/bin/paperless-load-secrets"]
+    env_file:
+      - ${PAPERLESS_ENV_FILE:-env/paperless.prod.env.example}
+    environment:
+      S6_READ_ONLY_ROOT: "1"
+      HOME: /usr/src/paperless
+      TMPDIR: /tmp/paperless
+    secrets:
+      - source: paperless_db_password
+        target: paperless_db_password
+      - source: paperless_secret_key
+        target: paperless_secret_key
+      - source: paperless_admin_password
+        target: paperless_admin_password
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./docker/paperless-load-secrets.sh
+        target: /usr/local/bin/paperless-load-secrets
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/paperless/data
+        target: /usr/src/paperless/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/paperless/media
+        target: /usr/src/paperless/media
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/paperless/export
+        target: /usr/src/paperless/export
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/paperless/consume
+        target: /usr/src/paperless/consume
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /run:rw,nosuid,nodev,noexec,size=64m,uid=${PAPERLESS_UID:-1000},gid=${PAPERLESS_GID:-1000},mode=1777
+      - /tmp:rw,nosuid,nodev,noexec,size=1g,uid=${PAPERLESS_UID:-1000},gid=${PAPERLESS_GID:-1000},mode=1777
+      - /var/cache/fontconfig:rw,nosuid,nodev,noexec,size=64m,uid=${PAPERLESS_UID:-1000},gid=${PAPERLESS_GID:-1000},mode=1777
+      - /usr/src/paperless/.gnupg:rw,nosuid,nodev,noexec,size=16m,uid=${PAPERLESS_UID:-1000},gid=${PAPERLESS_GID:-1000},mode=0700
+    shm_size: 256m
+    networks:
+      app_internal:
+      paperless_internal:
+      paperless_egress:
+      admin:
+        aliases:
+          - one-paperless
+    cpus: 3.00
+    mem_limit: 3g
+    pids_limit: 768
+    stop_grace_period: 90s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -L --max-time 2 http://127.0.0.1:8000 >/dev/null
+          && python /usr/src/paperless/src/manage.py check --database default >/dev/null
+      interval: 60s
+      timeout: 20s
+      retries: 5
+      start_period: 240s
+
+  migrate:
+    <<: *hardened
+    image: ${DATASYNQ_BACKEND_IMAGE:?Set DATASYNQ_BACKEND_IMAGE to an immutable digest reference}
+    user: "65532:65532"
+    group_add:
+      - ${DATASYNQ_SECRETS_GID:?Set DATASYNQ_SECRETS_GID to the host secrets group}
+    environment:
+      ENVIRONMENT: test
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      HOME: /tmp
+      TMPDIR: /tmp
+    secrets:
+      - source: database_url
+        target: database_url
+      - source: runtime_database_url
+        target: runtime_database_url
+    command: ["python", "-m", "app.migrate"]
+    depends_on:
+      vectordb:
+        condition: service_healthy
+    restart: "no"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=65532,gid=65532,mode=0700
+    networks:
+      vector_internal:
+    cpus: 0.50
+    mem_limit: 512m
+    pids_limit: 128
+
+  backend:
+    <<: *hardened
+    image: ${DATASYNQ_BACKEND_IMAGE:?Set DATASYNQ_BACKEND_IMAGE to an immutable digest reference}
+    user: "65532:65532"
+    group_add:
+      - ${DATASYNQ_SECRETS_GID:?Set DATASYNQ_SECRETS_GID to the host secrets group}
+    env_file:
+      - ${BACKEND_ENV_FILE:-env/backend.prod.env.example}
+    environment:
+      ENVIRONMENT: production
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      HOME: /tmp
+      TMPDIR: /tmp
+    secrets:
+      - source: paperless_api_token
+        target: paperless_api_token
+      - source: openai_api_key
+        target: openai_api_key
+      - source: runtime_database_url
+        target: database_url
+      - source: admin_password
+        target: admin_password
+      - source: smtp_password
+        target: smtp_password
+      - source: mail_imap_password
+        target: mail_imap_password
+      - source: mfa_encryption_key
+        target: mfa_encryption_key
+    depends_on:
+      paperless:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=128m,uid=65532,gid=65532,mode=0700
+    networks:
+      caddy:
+        aliases:
+          - one-backend
+      app_internal:
+      vector_internal:
+    cpus: 2.00
+    mem_limit: 2g
+    pids_limit: 256
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).read()
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    <<: *hardened
+    image: ${DATASYNQ_FRONTEND_IMAGE:?Set DATASYNQ_FRONTEND_IMAGE to an immutable digest reference}
+    user: "101:101"
+    depends_on:
+      backend:
+        condition: service_healthy
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=101,gid=101,mode=0700
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    networks:
+      caddy:
+        aliases:
+          - one-frontend
+    cpus: 0.50
+    mem_limit: 128m
+    pids_limit: 96
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 2 -O /dev/null http://127.0.0.1/index.html"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:?Set CADDY_NETWORK to the existing reverse-proxy network}
+  admin:
+    external: true
+    name: ${ADMIN_NETWORK:?Set ADMIN_NETWORK to the existing VPN-only admin network}
+  app_internal:
+    internal: true
+  paperless_internal:
+    internal: true
+  vector_internal:
+    internal: true
+  paperless_egress:
+    driver: bridge
+
+secrets:
+  paperless_db_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/paperless_db_password
+  paperless_secret_key:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/paperless_secret_key
+  paperless_admin_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/paperless_admin_password
+  vectordb_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/vectordb_password
+  paperless_api_token:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/paperless_api_token
+  openai_api_key:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/openai_api_key
+  database_url:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/database_url
+  runtime_database_url:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/runtime_database_url
+  admin_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/admin_password
+  smtp_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/smtp_password
+  mail_imap_password:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/mail_imap_password
+  mfa_encryption_key:
+    file: ${DATASYNQ_SECRETS_DIR:?Set DATASYNQ_SECRETS_DIR}/mfa_encryption_key

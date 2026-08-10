@@ -12,11 +12,14 @@ from functools import lru_cache
 
 from openai import AsyncOpenAI
 
-from .config import settings
+from .config import reveal_secret, settings
 
 
 @lru_cache(maxsize=1)
-def get_client() -> AsyncOpenAI:
-    # `or None` lets the SDK fall back to the OPENAI_API_KEY env var
-    # instead of treating the empty default as an explicit (bad) key.
-    return AsyncOpenAI(api_key=settings.openai_api_key or None)
+def _get_transport() -> AsyncOpenAI:
+    # Pydantic is the authoritative source; the SDK must not silently bypass
+    # validation by reading OPENAI_API_KEY from the ambient environment itself.
+    api_key = reveal_secret(settings.openai_api_key)
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY ist nicht konfiguriert.")
+    return AsyncOpenAI(api_key=api_key)

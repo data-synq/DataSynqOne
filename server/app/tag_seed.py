@@ -20,6 +20,12 @@ TAXONOMY: list[tuple[str, str]] = [
     ("tenant-notice", "#d7c394"),
     ("insurance", "#718087"),
     ("utility-bill", "#83afc2"),
+    # Zustände der Mail-Aufnahme-Pipeline (mail/intake.py) — eigene Tags statt
+    # stiller Nebenwirkungen, damit jeder Zustand in Paperless/Dashboard sichtbar
+    # und filterbar bleibt.
+    ("anliegen", "#a8c5d2"),
+    ("spam-verdacht", "#8f3323"),
+    ("warten-auf-freigabe", "#d7c394"),
 ]
 
 STATUS_TAGS = {"open", "in-progress", "done", "urgent", "overdue"}

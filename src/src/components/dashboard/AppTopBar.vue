@@ -1,11 +1,29 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { api, type PaperlessDocument } from "../../api/client";
+import { useCaseContextStore } from "../../stores/caseContext";
 import { useChatStore } from "../../stores/chat";
 import { useDashboardStore } from "../../stores/dashboard";
+import AccountMenu from "./AccountMenu.vue";
 
 const chat = useChatStore();
 const dashboard = useDashboardStore();
+const caseContext = useCaseContextStore();
+const route = useRoute();
+
+// Eine flache Liste statt hartkodierter Links im Template: ein weiterer
+// Navigationspunkt ist dann nur noch ein Eintrag hier, kein Layout-Umbau.
+const NAV_ITEMS = [{ to: "/anliegen", label: "Anliegen" }];
+
+// Die Dokumentsuche durchsucht Paperless-Dokumente — in der Anliegenverwaltung
+// (eigene Entität, kein Paperless-Dokument) hat das keinen Treffer und
+// verwirrt eher, als dass es hilft.
+const inCasesSection = computed(() => route.path.startsWith("/anliegen"));
+
+watch(inCasesSection, (value) => {
+  if (value) reset();
+});
 
 const query = ref("");
 const results = ref<PaperlessDocument[]>([]);
@@ -65,10 +83,35 @@ function reset() {
 
 <template>
   <header class="topbar">
-    <div class="topbar__brand">
-      <span class="topbar__product">DataSynq One</span>
+    <div class="topbar__left">
+      <div class="topbar__brand">
+        <RouterLink to="/" class="topbar__product">DataSynq One</RouterLink>
+        <span class="topbar__divider" />
+        <span class="topbar__context">Dokumentenakte</span>
+      </div>
+
       <span class="topbar__divider" />
-      <span class="topbar__context">Dokumentenakte</span>
+
+      <nav class="topbar__nav">
+        <RouterLink
+          v-for="item in NAV_ITEMS"
+          :key="item.to"
+          :to="item.to"
+          class="topbar__nav-link"
+          :class="{ 'is-active': route.path.startsWith(item.to) }"
+        >
+          {{ item.label }}
+        </RouterLink>
+      </nav>
+
+      <template v-if="caseContext.activeCase">
+        <span class="topbar__divider" />
+        <div class="topbar__case-status" :class="`topbar__case-status--${caseContext.activeCase.status}`">
+          <span class="topbar__case-status-dot" />
+          <span class="mono">{{ caseContext.activeCase.trackingId }}</span>
+          {{ caseContext.activeCase.status === "open" ? "Offen" : "Geschlossen" }}
+        </div>
+      </template>
     </div>
 
     <div class="search" @keydown.esc="reset">
@@ -78,10 +121,13 @@ function reset() {
         v-model="query"
         type="search"
         class="search__input"
+        :disabled="inCasesSection"
         :placeholder="
-          dashboard.overview
-            ? `Suche in ${dashboard.overview.kpis.total.toLocaleString('de-DE')} Dokumenten`
-            : 'Suche in Dokumenten'
+          inCasesSection
+            ? 'Dokumentsuche (nicht in Anliegen)'
+            : dashboard.overview
+              ? `Suche in ${dashboard.overview.kpis.total.toLocaleString('de-DE')} Dokumenten`
+              : 'Suche in Dokumenten'
         "
         autocomplete="off"
         @focus="open = results.length > 0 || searching"
@@ -104,10 +150,9 @@ function reset() {
       </div>
     </div>
 
-    <button type="button" class="button--primary assistant-button" @click="chat.openChat()">
-      <span class="assistant-button__dot" />
-      Assistent
-    </button>
+    <div class="topbar__actions">
+      <AccountMenu />
+    </div>
   </header>
 </template>
 
@@ -123,10 +168,23 @@ function reset() {
   border-bottom: 1px solid var(--color-line);
 }
 
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
 .topbar__brand {
   display: flex;
   align-items: baseline;
   gap: 0.625rem;
+}
+
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .topbar__product {
@@ -136,6 +194,26 @@ function reset() {
   text-transform: uppercase;
   color: var(--color-ink);
   white-space: nowrap;
+  text-decoration: none;
+}
+
+.topbar__nav-link {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  color: var(--color-ink-4);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.topbar__nav-link:hover {
+  color: var(--color-ink);
+}
+
+.topbar__nav-link.is-active {
+  color: var(--color-ink);
+  text-decoration: underline dotted;
 }
 
 .topbar__divider {
@@ -150,6 +228,41 @@ function reset() {
   letter-spacing: 0.04em;
   color: var(--color-ink-4);
   white-space: nowrap;
+}
+
+/* Deutlich sichtbarer Status des gerade betrachteten Anliegens — lebt in der
+   Navbar statt nur auf der Seite selbst, weil das der Ort ist, den man beim
+   Wechsel zwischen Anliegen staendig im Blick hat. */
+.topbar__case-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.topbar__case-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.topbar__case-status--open {
+  color: var(--color-accent-strong, var(--color-accent));
+}
+
+.topbar__case-status--open .topbar__case-status-dot {
+  background: var(--color-accent-strong, var(--color-accent));
+}
+
+.topbar__case-status--closed {
+  color: var(--color-ink-4);
+}
+
+.topbar__case-status--closed .topbar__case-status-dot {
+  background: var(--color-ink-4);
 }
 
 /* Die Suche sitzt in der mittleren Spalte und darf sie nicht sprengen —
@@ -172,6 +285,12 @@ function reset() {
 .search__input {
   height: 26px;
   font-size: var(--font-size-md);
+}
+
+.search__input:disabled {
+  color: var(--color-ink-5);
+  border-bottom-color: var(--color-line-soft);
+  cursor: not-allowed;
 }
 
 .search__results {
@@ -228,9 +347,9 @@ function reset() {
   white-space: nowrap;
 }
 
-.assistant-button__dot {
-  width: 6px;
-  height: 6px;
-  background: #7fbfa2;
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 </style>
