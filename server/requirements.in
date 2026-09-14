@@ -9,4 +9,4 @@ pgvector>=0.3
 argon2-cffi>=23.1
 cryptography>=45
 pyotp>=2.9
-aiosmtplib>=3.0
+aiosmtplib>=5.1.3
